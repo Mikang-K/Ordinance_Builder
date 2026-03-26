@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Env & secrets
+.env
+
+# Dev/test
+pipeline_test/
+.pytest_cache/
+.coverage
+
+# Frontend (not needed for backend image)
+frontend/
+
+# Git & IDE
+.git/
+.vscode/
+.idea/
+
+# Logs & DB
+*.log
+*.db
+*.sqlite
+neo4j_data/

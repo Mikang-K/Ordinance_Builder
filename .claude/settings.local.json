@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(C:/Python313/python.exe -c \"import sys; sys.stdout.buffer.write\\(sys.stdin.buffer.read\\(\\)\\)\")"
+    ]
+  }
+}
