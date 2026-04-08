@@ -1,6 +1,7 @@
+import sqlite3
 from functools import partial
 
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 
 from app.core.config import settings
@@ -28,7 +29,7 @@ from app.graph.state import OrdinanceBuilderState
 # Compiled graph singleton
 # ---------------------------------------------------------------------------
 _graph_app = None
-_memory: MemorySaver | None = None
+_memory: SqliteSaver | None = None
 
 
 def create_workflow():
@@ -145,7 +146,8 @@ def create_workflow():
     # Legal check always ends the turn; user decides to re-check or finalize
     builder.add_edge("legal_checker", END)
 
-    memory = MemorySaver()
+    conn = sqlite3.connect(settings.CHECKPOINT_DB_PATH, check_same_thread=False)
+    memory = SqliteSaver(conn)
     compiled = builder.compile(checkpointer=memory)
     return compiled, memory
 

@@ -13,11 +13,14 @@ import logging
 import time
 from dataclasses import asdict
 
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+
 from neo4j import GraphDatabase
 
 from pipeline.config import config
 from pipeline.transform.schema_mapper import (
     ItemNode,
+    LegalTermNode,
     OrdinanceNode,
     ParagraphNode,
     ProvisionNode,
@@ -245,6 +248,14 @@ WHERE lt.term_name IN ['산업단지', '위원회', '규칙', '조례']
 SET lt:LegalObject
 """
 
+_UPSERT_LEGAL_TERMS_BATCH = """
+UNWIND $terms AS t
+MERGE (lt:LegalTerm {term_name: t.term_name})
+SET lt.definition  = t.definition,
+    lt.synonyms    = t.synonyms,
+    lt.last_synced = datetime()
+"""
+
 
 # ---------------------------------------------------------------------------
 # Loader class
@@ -353,7 +364,7 @@ class Neo4jLoader:
         # Generate and persist embedding for the Ordinance node
         embed_text = f"{ordinance.title} {ordinance.region_name}"
         try:
-            vector = self._get_embedder().embed_query(embed_text)
+            vector = self._embed_query_with_retry(self._get_embedder(), embed_text)
             with self._driver.session() as session:
                 session.run(_SET_ORDINANCE_EMBEDDING, id=ordinance.id, embedding=vector)
         except Exception as exc:  # noqa: BLE001
@@ -396,10 +407,44 @@ class Neo4jLoader:
         results: list[list[float]] = []
         for i in range(0, len(texts), config.embedding_batch_size):
             batch = texts[i : i + config.embedding_batch_size]
-            results.extend(embedder.embed_documents(batch))
+            results.extend(self._embed_documents_with_retry(embedder, batch))
             if i + config.embedding_batch_size < len(texts):
                 time.sleep(config.embedding_request_delay)
         return results
+
+    @staticmethod
+    def _embed_documents_with_retry(embedder, texts: list[str]) -> list[list[float]]:
+        """Call embed_documents with exponential backoff on 429 RESOURCE_EXHAUSTED."""
+        def _is_rate_limit(exc: BaseException) -> bool:
+            return "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc)
+
+        @retry(
+            retry=retry_if_exception(_is_rate_limit),
+            wait=wait_exponential(multiplier=2, min=60, max=300),
+            stop=stop_after_attempt(6),
+            reraise=True,
+        )
+        def _call():
+            return embedder.embed_documents(texts)
+
+        return _call()
+
+    @staticmethod
+    def _embed_query_with_retry(embedder, text: str) -> list[float]:
+        """Call embed_query with exponential backoff on 429 RESOURCE_EXHAUSTED."""
+        def _is_rate_limit(exc: BaseException) -> bool:
+            return "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc)
+
+        @retry(
+            retry=retry_if_exception(_is_rate_limit),
+            wait=wait_exponential(multiplier=2, min=60, max=300),
+            stop=stop_after_attempt(6),
+            reraise=True,
+        )
+        def _call():
+            return embedder.embed_query(text)
+
+        return _call()
 
     def create_vector_indexes(self) -> None:
         """
@@ -524,6 +569,23 @@ class Neo4jLoader:
             result = session.run(_BUILD_CONFLICTS_WITH)
             summary = result.consume()
         logger.info("CONFLICTS_WITH: created %d relationships", summary.counters.relationships_created)
+
+    def upsert_legal_terms(self, terms: list[LegalTermNode]) -> None:
+        """
+        Upsert LegalTerm nodes from API data.
+
+        MERGE on term_name (UNIQUE constraint) — safe to re-run.
+        Sets definition and synonyms on each node.
+        """
+        if not terms:
+            return
+        term_dicts = [
+            {"term_name": t.term_name, "definition": t.definition, "synonyms": t.synonyms}
+            for t in terms
+        ]
+        with self._driver.session() as session:
+            session.run(_UPSERT_LEGAL_TERMS_BATCH, terms=term_dicts)
+        logger.info("upserted %d LegalTerm nodes", len(terms))
 
     def build_legal_term_subtypes(self) -> None:
         """

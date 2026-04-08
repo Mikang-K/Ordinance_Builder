@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     NEO4J_USER: str
     NEO4J_PASSWORD: str
 
+    # SQLite checkpointer — session state is persisted to this file
+    CHECKPOINT_DB_PATH: str = "sessions.db"
+
     # CORS — comma-separated origins, or JSON array string
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",  # Vite dev server

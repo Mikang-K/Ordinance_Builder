@@ -16,6 +16,7 @@ All dates are normalized to YYYY-MM-DD (API returns YYYYMMDD).
 from dataclasses import dataclass
 
 from pipeline.api.law_api_client import (
+    LegalTermDetail,
     OrdinanceFull,
     ParagraphRaw,
     ProvisionRaw,
@@ -75,6 +76,14 @@ class SubItemNode:
     item_id: str
     seq: int
     content_text: str
+
+
+@dataclass
+class LegalTermNode:
+    """OWL: 법적개념 (LegalTerm) node."""
+    term_name: str       # unique key (UNIQUE constraint in Neo4j)
+    definition: str      # 법령용어정의
+    synonyms: list[str]  # 한자 표기 등 (비어있을 수 있음)
 
 
 def _normalize_date(raw: str) -> str:
@@ -225,6 +234,16 @@ def map_ordinance(
             all_subitem_nodes.extend(sub_n)
 
     return ordinance_node, provision_nodes, all_para_nodes, all_item_nodes, all_subitem_nodes
+
+
+def map_legal_term(detail: LegalTermDetail) -> LegalTermNode:
+    """Convert a LegalTermDetail (from API) into a LegalTermNode for Neo4j."""
+    synonyms = [detail.hanja] if detail.hanja else []
+    return LegalTermNode(
+        term_name=detail.term_name,
+        definition=detail.definition,
+        synonyms=synonyms,
+    )
 
 
 def extract_keywords(provisions: list[ProvisionRaw]) -> list[str]:

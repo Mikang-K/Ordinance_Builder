@@ -1,15 +1,28 @@
-# Keyword hints used to match provision content to article interview keys.
-# Each article key maps to phrases likely to appear in the corresponding provision.
-_ARTICLE_HINTS: dict[str, list[str]] = {
-    "목적": ["목적으로 한다", "이바지함을 목적", "목적"],
-    "정의": ["이라 한다", "말한다", "이란 ", "정의"],
+# Title-based hints: matched against p.article_title (preferred — more precise).
+# Each article key maps to substrings likely to appear in the article title.
+_ARTICLE_TITLE_HINTS: dict[str, list[str]] = {
+    "목적":   ["목적"],
+    "정의":   ["정의"],
+    "지원대상": ["대상", "자격"],
+    "지원내용": ["지원 내용", "지원내용", "지원 사업", "지원사업", "지원 항목"],
+    "지원금액": ["금액", "한도", "지원액", "보조금"],
+    "신청방법": ["신청", "방법", "절차"],
+    "심사선정": ["심사", "선정", "위원회"],
+    "환수제재": ["환수", "반환", "제재", "금지"],
+    "위임":   ["위임", "규칙"],
+}
+
+# Content-text hints: fallback when article_title is absent or unmatched.
+_ARTICLE_CONTENT_HINTS: dict[str, list[str]] = {
+    "목적":   ["목적으로 한다", "이바지함을 목적", "목적"],
+    "정의":   ["이라 한다", "말한다", "이란 ", "정의"],
     "지원대상": ["지원 대상", "대상자", "자격 요건", "자격은", "으로 한다"],
     "지원내용": ["지원한다", "지급한다", "보조금으로", "지원 내용", "지원한다"],
     "지원금액": ["한도로 하며", "한도로 한다", "이내로", "만원", "예산의 범위"],
     "신청방법": ["신청", "제출하여야", "신청 방법", "제출 서류"],
     "심사선정": ["심사위원회", "심사·선정", "심사 기준", "선정한다"],
     "환수제재": ["환수", "반환", "제재", "지원을 제한"],
-    "위임": ["규칙으로 정한다", "위임"],
+    "위임":   ["규칙으로 정한다", "위임"],
 }
 
 
@@ -20,12 +33,18 @@ def find_article_examples(
 ) -> list[dict]:
     """
     Return up to max_count provisions from article_examples that match
-    the given article_key based on keyword hints.
+    the given article_key.
+
+    Matching priority:
+    1. article_title substring match (precise — uses Neo4j-stored title)
+    2. content_text keyword match (fallback for provisions without a title)
 
     Picks at most one example per ordinance to avoid redundancy.
     """
-    hints = _ARTICLE_HINTS.get(article_key, [])
-    if not hints or not article_examples:
+    title_hints = _ARTICLE_TITLE_HINTS.get(article_key, [])
+    content_hints = _ARTICLE_CONTENT_HINTS.get(article_key, [])
+
+    if not (title_hints or content_hints) or not article_examples:
         return []
 
     matched: list[dict] = []
@@ -35,8 +54,14 @@ def find_article_examples(
         oid = ex.get("ordinance_id", "")
         if oid in seen_ordinances:
             continue
+
+        article_title = ex.get("article_title") or ""
         content = ex.get("content_text", "")
-        if any(hint in content for hint in hints):
+
+        title_match = any(hint in article_title for hint in title_hints)
+        content_match = (not title_hints) and any(hint in content for hint in content_hints)
+
+        if title_match or content_match:
             matched.append(ex)
             seen_ordinances.add(oid)
             if len(matched) >= max_count:

@@ -20,7 +20,7 @@ import time
 from pipeline.api.law_api_client import LawApiClient
 from pipeline.config import config
 from pipeline.loaders.neo4j_loader import Neo4jLoader
-from pipeline.transform.schema_mapper import map_ordinance, map_statute
+from pipeline.transform.schema_mapper import map_legal_term, map_ordinance, map_statute
 
 logging.basicConfig(
     level=logging.INFO,
@@ -105,6 +105,23 @@ def run() -> None:
                     seen_statute_msts.add(s.mst)
                     if load_statute(s.mst, client, loader, s.detail_link):
                         statute_count += 1
+
+        # ── 1.5. LegalTerm nodes ──────────────────────────────────────
+        logger.info("=== Phase 1.5: legal terms (%d keywords) ===", len(config.domain_keywords))
+        seen_term_names: set[str] = set()
+        legal_term_count = 0
+        for keyword in config.domain_keywords:
+            summaries = client.search_legal_terms(keyword)
+            for s in summaries:
+                if s.term_name not in seen_term_names:
+                    seen_term_names.add(s.term_name)
+                    details = client.get_legal_term_detail(s.mst)
+                    if details:
+                        nodes = [map_legal_term(d) for d in details]
+                        loader.upsert_legal_terms(nodes)
+                        legal_term_count += len(nodes)
+                    time.sleep(config.api_request_delay)
+        logger.info("Phase 1.5: loaded %d LegalTerm nodes (%d unique queries)", legal_term_count, len(seen_term_names))
 
         # ── 2. Domain-keyword statutes ─────────────────────────────────
         logger.info("=== Phase 2: domain-keyword statutes (%d keywords) ===", len(config.domain_keywords))

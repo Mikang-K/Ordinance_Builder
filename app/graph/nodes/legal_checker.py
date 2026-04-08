@@ -49,8 +49,9 @@ def legal_checker_node(
 
     draft: str = state.get("draft_full_text") or ""
     legal_basis: list[dict] = state.get("legal_basis") or []
+    legal_terms: list[dict] = state.get("legal_terms") or []
 
-    human_prompt = build_legal_checker_human(draft, legal_basis)
+    human_prompt = build_legal_checker_human(draft, legal_basis, legal_terms)
     result: LegalCheckResult = structured_llm.invoke(
         [("system", LEGAL_CHECKER_SYSTEM), ("human", human_prompt)]
     )

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -9,12 +10,32 @@ from app.api.schemas import (
     ChatResponse,
     FinalizeRequest,
     FinalizeResponse,
+    MessageRecord,
     SessionCreateRequest,
     SessionCreateResponse,
+    SessionStateResponse,
+    SessionSummary,
 )
 from app.graph.workflow import get_graph
 
 router = APIRouter(prefix="/api/v1", tags=["ordinance"])
+
+# In-memory session registry: session_id → metadata + chat history
+_sessions_registry: dict[str, dict] = {}
+
+
+def _derive_title(ordinance_info: dict, initial_message: str = "") -> str:
+    region = ordinance_info.get("region", "")
+    purpose = ordinance_info.get("purpose", "")
+    if region and purpose:
+        return f"{region} {purpose} 조례"
+    elif purpose:
+        return f"{purpose} 조례"
+    elif region:
+        return f"{region} 조례"
+    elif initial_message:
+        return initial_message[:40] + ("..." if len(initial_message) > 40 else "")
+    return "새 조례"
 
 # Stage that indicates the ordinance is fully confirmed by the user
 _COMPLETE_STAGES = {"completed"}
@@ -53,6 +74,54 @@ _DEFAULT_STATE: dict[str, Any] = {
 }
 
 
+@router.get("/sessions", response_model=list[SessionSummary])
+async def list_sessions():
+    """Return all sessions sorted by creation time (newest first)."""
+    return [
+        SessionSummary(
+            session_id=sid,
+            title=data["title"],
+            stage=data["stage"],
+            created_at=data["created_at"],
+        )
+        for sid, data in sorted(
+            _sessions_registry.items(),
+            key=lambda x: x[1]["created_at"],
+            reverse=True,
+        )
+    ]
+
+
+@router.get("/session/{session_id}", response_model=SessionStateResponse)
+async def get_session_state(session_id: str):
+    """Return session metadata and chat history for restoring a session."""
+    if session_id not in _sessions_registry:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    entry = _sessions_registry[session_id]
+    stage = entry["stage"]
+
+    # Also read graph state to get draft / similar_ordinances
+    graph = get_graph()
+    config = {"configurable": {"thread_id": session_id}}
+    state_snapshot = graph.get_state(config)
+    values = (state_snapshot.values or {}) if state_snapshot else {}
+
+    return SessionStateResponse(
+        session_id=session_id,
+        title=entry["title"],
+        stage=stage,
+        created_at=entry["created_at"],
+        messages=[MessageRecord(**m) for m in entry["chat_history"]],
+        draft=values.get("draft_full_text") if stage in _DRAFT_VISIBLE_STAGES else None,
+        similar_ordinances=(
+            values.get("similar_ordinances") if stage in _SIMILAR_VISIBLE_STAGES else None
+        ),
+        legal_issues=values.get("legal_issues") if stage in _LEGAL_VISIBLE_STAGES else None,
+        ordinance_info=values.get("ordinance_info", {}),
+    )
+
+
 @router.post("/session", response_model=SessionCreateResponse)
 async def create_session(request: SessionCreateRequest):
     """
@@ -64,8 +133,12 @@ async def create_session(request: SessionCreateRequest):
     session_id = str(uuid.uuid4())
     graph = get_graph()
     config = {"configurable": {"thread_id": session_id}}
+    created_at = datetime.now(timezone.utc).isoformat()
+    initial_message = request.initial_message or ""
+    chat_history: list[dict] = []
 
     if request.initial_message:
+        chat_history.append({"role": "user", "text": request.initial_message})
         initial_state = {
             **_DEFAULT_STATE,
             "user_input": request.initial_message,
@@ -75,12 +148,34 @@ async def create_session(request: SessionCreateRequest):
             result = graph.invoke(initial_state, config=config)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"워크플로우 오류: {exc}") from exc
+
+        stage = result.get("current_stage", "intent_analysis")
+        ai_message = result.get("response_to_user", "조례 작성을 시작합니다.")
+        ordinance_info = result.get("ordinance_info", {})
+        chat_history.append({"role": "ai", "text": ai_message})
+
+        _sessions_registry[session_id] = {
+            "session_id": session_id,
+            "title": _derive_title(ordinance_info, initial_message),
+            "stage": stage,
+            "created_at": created_at,
+            "initial_message": initial_message,
+            "chat_history": chat_history,
+        }
         return SessionCreateResponse(
             session_id=session_id,
-            message=result.get("response_to_user", "조례 작성을 시작합니다."),
-            stage=result.get("current_stage", "intent_analysis"),
+            message=ai_message,
+            stage=stage,
         )
 
+    _sessions_registry[session_id] = {
+        "session_id": session_id,
+        "title": _derive_title({}, initial_message),
+        "stage": "intent_analysis",
+        "created_at": created_at,
+        "initial_message": initial_message,
+        "chat_history": chat_history,
+    }
     return SessionCreateResponse(
         session_id=session_id,
         message="안녕하세요! 어떤 조례를 작성하고 싶으신가요? 아이디어를 자유롭게 말씀해 주세요.",
@@ -120,10 +215,20 @@ async def chat(session_id: str, request: ChatRequest):
     stage: str = result.get("current_stage", "unknown")
     is_valid: bool | None = result.get("is_legally_valid")
     is_complete = stage in _COMPLETE_STAGES
+    ai_response = result.get("response_to_user", "")
+
+    # Update session registry
+    if session_id in _sessions_registry:
+        entry = _sessions_registry[session_id]
+        ordinance_info = result.get("ordinance_info", {})
+        entry["stage"] = stage
+        entry["title"] = _derive_title(ordinance_info, entry.get("initial_message", ""))
+        entry["chat_history"].append({"role": "user", "text": request.message})
+        entry["chat_history"].append({"role": "ai", "text": ai_response})
 
     return ChatResponse(
         session_id=session_id,
-        message=result.get("response_to_user", ""),
+        message=ai_response,
         stage=stage,
         is_complete=is_complete,
         draft=result.get("draft_full_text") if stage in _DRAFT_VISIBLE_STAGES else None,
@@ -165,6 +270,9 @@ async def finalize_session(session_id: str, request: FinalizeRequest = FinalizeR
             config,
             {"current_stage": "completed", "draft_full_text": final_draft},
         )
+
+    if session_id in _sessions_registry:
+        _sessions_registry[session_id]["stage"] = "completed"
 
     return FinalizeResponse(
         session_id=session_id,

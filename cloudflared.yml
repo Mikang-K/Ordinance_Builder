@@ -1,0 +1,22 @@
+# Cloudflare Zero Trust Tunnel 설정
+# 사용법:
+#   1. Zero Trust 대시보드(one.dash.cloudflare.com)에서 터널 생성 후
+#      TUNNEL_ID와 도메인을 아래에 채워넣으세요.
+#   2. cloudflared service install <TOKEN>  (대시보드에서 복사)
+#   3. cloudflared tunnel run --config cloudflared.yml
+
+tunnel: <TUNNEL_ID>
+credentials-file: C:\Users\user\.cloudflared\<TUNNEL_ID>.json
+
+ingress:
+  # /api/* 경로 → FastAPI 백엔드 (port 8000)
+  - hostname: mikang87.cloudflareaccess.com
+    path: /api/.*
+    service: http://localhost:8000
+
+  # 나머지 모든 경로 → 프론트엔드 (port 3000)
+  - hostname: mikang87.cloudflareaccess.com
+    service: http://localhost:3000
+
+  # 위 규칙에 해당하지 않는 요청 처리 (필수)
+  - service: http_status:404

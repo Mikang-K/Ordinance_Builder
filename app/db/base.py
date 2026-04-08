@@ -88,6 +88,24 @@ class GraphDBInterface(ABC):
         ...
 
     @abstractmethod
+    def find_legal_terms(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """
+        Return LegalTerm nodes relevant to the given keywords.
+
+        Primary path  — DEFINES (Provision → LegalTerm):
+            MATCH (p:Provision)-[:DEFINES]->(lt:LegalTerm)
+            WHERE ANY(kw IN $keywords WHERE lt.term_name CONTAINS kw)
+
+        Returns list of dicts with keys:
+            term_name, definition, source_statute
+        """
+        ...
+
+    @abstractmethod
     def get_legal_conflicts(
         self,
         ordinance_id: str,

@@ -41,14 +41,18 @@ def build_draft_reviewer_human(user_input: str, draft_full_text: str) -> str:
 # 2. Revision application
 # ---------------------------------------------------------------------------
 
-DRAFT_REVISION_SYSTEM = """
+from app.prompts.legal_terms import ONTOLOGY_TERM_GUIDE
+
+DRAFT_REVISION_SYSTEM = f"""
 당신은 30년 경력의 지방 조례 전문 법률 입법관입니다.
 기존 조례 초안에 사용자의 수정 요청을 반영하여 수정된 완성본을 반환하세요.
 
 수정 원칙:
 1. 사용자가 명시적으로 요청한 부분만 수정하고 나머지 조문은 원문 유지.
-2. 법적 형식과 조문 간 일관성 유지.
+2. 법적 형식과 조문 간 일관성 유지 — 온톨로지 기반 법률 용어 규칙을 준수.
 3. full_text는 수정된 전체 조문을 합쳐 완성된 텍스트로 작성.
+
+{ONTOLOGY_TERM_GUIDE}
 """.strip()
 
 

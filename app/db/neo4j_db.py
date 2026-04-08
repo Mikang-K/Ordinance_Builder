@@ -203,6 +203,44 @@ class Neo4jGraphDB(GraphDBInterface):
             result = session.run(keyword_query, region=region, keywords=keywords, limit=limit)
             return [dict(r) for r in result]
 
+    def find_legal_terms(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """
+        Return LegalTerm nodes relevant to the given keywords.
+
+        Primary: DEFINES path (Provision → LegalTerm) — includes source statute.
+        Fallback: direct LegalTerm keyword match when DEFINES yields nothing.
+        """
+        defines_query = """
+        MATCH (p:Provision)-[:DEFINES]->(lt:LegalTerm)
+        MATCH (s:Statute)-[:CONTAINS]->(p)
+        WHERE ANY(kw IN $keywords WHERE lt.term_name CONTAINS kw)
+          AND lt.definition IS NOT NULL
+        WITH lt.term_name AS term_name,
+             lt.definition AS definition,
+             s.title       AS source_statute
+        RETURN term_name, min(definition) AS definition, min(source_statute) AS source_statute
+        LIMIT $limit
+        """
+        fallback_query = """
+        MATCH (lt:LegalTerm)
+        WHERE ANY(kw IN $keywords WHERE lt.term_name CONTAINS kw)
+          AND lt.definition IS NOT NULL
+        WITH lt.term_name AS term_name,
+             lt.definition AS definition
+        RETURN term_name, min(definition) AS definition, '' AS source_statute
+        LIMIT $limit
+        """
+        with self._driver.session() as session:
+            rows = [dict(r) for r in session.run(defines_query, keywords=keywords, limit=limit)]
+            if not rows:
+                rows = [dict(r) for r in session.run(fallback_query, keywords=keywords, limit=limit)]
+        logger.debug("find_legal_terms keywords=%s → %d terms", keywords, len(rows))
+        return rows
+
     def get_limiting_provisions(
         self,
         legal_term: str,
@@ -241,11 +279,12 @@ class Neo4jGraphDB(GraphDBInterface):
         query = """
         MATCH (o:Ordinance)-[:CONTAINS]->(p:Provision)
         WHERE o.id IN $ids
-        RETURN o.id           AS ordinance_id,
-               o.region_name  AS region_name,
-               o.title        AS ordinance_title,
-               p.article_no   AS article_no,
-               p.content_text AS content_text
+        RETURN o.id            AS ordinance_id,
+               o.region_name   AS region_name,
+               o.title         AS ordinance_title,
+               p.article_no    AS article_no,
+               p.article_title AS article_title,
+               p.content_text  AS content_text
         ORDER BY o.id, p.article_no
         LIMIT 50
         """

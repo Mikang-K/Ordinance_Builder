@@ -118,6 +118,43 @@ class MockGraphDB(GraphDBInterface):
             if p["ordinance_id"] in ordinance_ids
         ]
 
+    def find_legal_terms(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        mock_terms = [
+            {
+                "term_name": "보조금",
+                "definition": "국가 또는 지방자치단체가 특정 사업을 지원하기 위하여 반대급부 없이 교부하는 금전적 급부를 말한다.",
+                "source_statute": "보조금 관리에 관한 법률",
+            },
+            {
+                "term_name": "청년",
+                "definition": "19세 이상 34세 이하인 사람을 말한다. 다만, 다른 법령 및 조례에서 청년에 대한 연령을 다르게 적용하는 경우에는 그에 따른다.",
+                "source_statute": "청년기본법",
+            },
+            {
+                "term_name": "창업",
+                "definition": "중소기업을 새로 설립하는 것을 말한다.",
+                "source_statute": "중소기업 창업 지원법",
+            },
+            {
+                "term_name": "소상공인",
+                "definition": "소기업 중 상시 근로자 수가 10명 미만인 사업자로서 업종별 상시 근로자 수 등이 대통령령으로 정하는 기준에 해당하는 자를 말한다.",
+                "source_statute": "소상공인 보호 및 지원에 관한 법률",
+            },
+            {
+                "term_name": "중소기업",
+                "definition": "중소기업기본법 제2조에 따른 기업으로서 업종별로 매출액 또는 자산총액 등이 대통령령으로 정하는 기준에 맞는 기업을 말한다.",
+                "source_statute": "중소기업기본법",
+            },
+        ]
+        return [
+            t for t in mock_terms
+            if any(kw in t["term_name"] for kw in keywords)
+        ][:limit]
+
     def get_legal_conflicts(
         self,
         ordinance_id: str,

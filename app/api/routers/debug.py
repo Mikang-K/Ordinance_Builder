@@ -142,6 +142,28 @@ def debug_vector(
     }
 
 
+@router.get("/legal-terms")
+def debug_legal_terms(
+    keywords: Annotated[str, Query(description="쉼표로 구분된 키워드 (예: 청년,창업,보조금)")] = "청년,창업,보조금",
+    limit: Annotated[int, Query(description="반환 결과 수")] = 10,
+):
+    """
+    Test find_legal_terms() — verify LegalTerm nodes are loaded and queryable.
+    """
+    kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
+    db = _get_db()
+    try:
+        terms = db.find_legal_terms(keywords=kw_list, limit=limit)
+    finally:
+        db.close()
+
+    return {
+        "query": {"keywords": kw_list},
+        "legal_terms_count": len(terms),
+        "legal_terms": terms,
+    }
+
+
 @router.get("/db/stats")
 def debug_db_stats():
     """Return node/relationship counts for each label in Neo4j."""

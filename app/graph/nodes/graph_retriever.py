@@ -39,9 +39,13 @@ def graph_retriever_node(
     ordinance_ids = [o["ordinance_id"] for o in similar_ordinances]
     article_examples = db.get_similar_ordinance_provisions(ordinance_ids=ordinance_ids)
 
+    # Fetch LegalTerm definitions for key terms — used in drafting and legal review.
+    legal_terms = db.find_legal_terms(keywords=keywords)
+
     return {
         "legal_basis": legal_basis,
         "similar_ordinances": similar_ordinances,
         "article_examples": article_examples,
+        "legal_terms": legal_terms,
         "current_stage": "retrieving",
     }

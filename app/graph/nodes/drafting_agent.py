@@ -40,8 +40,9 @@ def drafting_agent_node(
     legal_basis: list[dict] = state.get("legal_basis") or []
     similar: list[dict] = state.get("similar_ordinances") or []
     article_contents: dict = state.get("article_contents") or {}
+    legal_terms: list[dict] = state.get("legal_terms") or []
 
-    human_prompt = build_drafting_human(info, legal_basis, similar, article_contents)
+    human_prompt = build_drafting_human(info, legal_basis, similar, article_contents, legal_terms)
     result: OrdinanceDraft = structured_llm.invoke(
         [("system", DRAFTING_SYSTEM), ("human", human_prompt)]
     )

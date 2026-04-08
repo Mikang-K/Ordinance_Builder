@@ -1,13 +1,15 @@
 import { useState, useRef } from 'react'
 import type { ChatMessage, LegalIssue, SimilarOrdinance, Stage } from './types'
-import { createSession, sendMessage, finalizeSession } from './api'
+import { createSession, sendMessage, finalizeSession, getSessionState } from './api'
 import StageIndicator from './components/StageIndicator'
 import ChatWindow from './components/ChatWindow'
 import DraftModal from './components/DraftModal'
 import LegalIssuesPanel from './components/LegalIssuesPanel'
 import SimilarOrdinancesPanel from './components/SimilarOrdinancesPanel'
+import SessionListScreen from './components/SessionListScreen'
 
 export default function App() {
+  const [view, setView] = useState<'list' | 'chat'>('list')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -145,7 +147,7 @@ export default function App() {
     }
   }
 
-  const handleReset = () => {
+  const resetState = () => {
     sessionIdRef.current = null
     setMessages([])
     setStage(null)
@@ -161,7 +163,59 @@ export default function App() {
     setActiveTab('chat')
   }
 
+  const handleReset = () => {
+    resetState()
+    setView('list')
+  }
+
+  const handleNewSession = () => {
+    resetState()
+    setView('chat')
+  }
+
+  const handleSelectSession = async (sessionId: string) => {
+    setError(null)
+    try {
+      const state = await getSessionState(sessionId)
+      resetState()
+      sessionIdRef.current = state.session_id
+      setMessages(state.messages)
+      setStage(state.stage as Stage)
+
+      if (state.similar_ordinances && state.similar_ordinances.length > 0) {
+        setSimilarOrdinances(state.similar_ordinances)
+      }
+
+      if (state.stage === 'completed') {
+        if (state.draft) setCompletedDraft(state.draft)
+        if (state.legal_issues && state.legal_issues.length > 0) {
+          setFinalLegalIssues(state.legal_issues)
+        }
+        setActiveTab('result')
+      } else if (state.draft) {
+        setPendingDraft(state.draft)
+        if (state.legal_issues) setPendingLegalIssues(state.legal_issues)
+        if (state.stage === 'draft_review' || state.stage === 'legal_checking') {
+          setIsDraftModalOpen(true)
+        }
+      }
+
+      setView('chat')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '세션을 불러오지 못했습니다.')
+    }
+  }
+
   const hasResult = !!(completedDraft || finalLegalIssues)
+
+  if (view === 'list') {
+    return (
+      <SessionListScreen
+        onSelectSession={handleSelectSession}
+        onNewSession={handleNewSession}
+      />
+    )
+  }
 
   return (
     <div className="app">
@@ -177,7 +231,7 @@ export default function App() {
               초안 편집 · 검증
             </button>
           )}
-          <button className="reset-btn" onClick={handleReset}>새 조례</button>
+          <button className="reset-btn" onClick={handleReset}>목록</button>
         </div>
       </header>
 

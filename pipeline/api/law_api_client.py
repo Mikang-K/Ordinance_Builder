@@ -97,6 +97,24 @@ class OrdinanceFull:
     provisions: list[ProvisionRaw]
 
 
+@dataclass
+class LegalTermSummary:
+    """법령용어 metadata from list search (lawSearch.do?target=lstrmAI)."""
+    lstrm_id: str
+    term_name: str   # 법령용어명
+    mst: str         # MST extracted from 조문간관계링크 — used for detail lookup
+
+
+@dataclass
+class LegalTermDetail:
+    """법령용어 detail including definition (lawService.do?target=lstrm)."""
+    lstrm_id: str
+    term_name: str   # lstrm_name_ko
+    hanja: str       # lstrm_name_hanja (한자 표기, synonyms 용도)
+    definition: str  # 법령용어정의
+    source: str      # 출처 (법령명)
+
+
 # ---------------------------------------------------------------------------
 # API client
 # ---------------------------------------------------------------------------
@@ -285,6 +303,103 @@ class LawApiClient:
             enforcement_date=_xt(basic, "시행일자"),
             provisions=provisions,
         )
+
+    # ------------------------------------------------------------------
+    # Public: Legal Terms (법령용어)
+    # ------------------------------------------------------------------
+
+    def search_legal_terms(self, query: str) -> list[LegalTermSummary]:
+        """
+        Search legal terms by keyword.
+
+        Endpoint: lawSearch.do?target=lstrmAI
+        Response: {"lstrmAISearch": {"법령용어": [...], "검색결과개수": "N", ...}}
+        Returns: list of LegalTermSummary including MST extracted from 조문간관계링크.
+        """
+        results: list[LegalTermSummary] = []
+        page = 1
+
+        while True:
+            data = self._get("lawSearch.do", {
+                "target": "lstrmAI",
+                "query": query,
+                "display": config.api_display_count,
+                "page": page,
+            })
+
+            search = data.get("lstrmAISearch", {})
+            items = search.get("법령용어", [])
+            if isinstance(items, dict):
+                items = [items]
+
+            if not items:
+                break
+
+            for item in items:
+                term_name = item.get("법령용어명", "").strip()
+                lstrm_id = str(item.get("id", ""))
+
+                # Extract MST from 조문간관계링크, e.g. "…&MST=1316243"
+                jo_link = item.get("조문간관계링크", "")
+                mst = ""
+                for part in jo_link.split("&"):
+                    if part.startswith("MST="):
+                        mst = part[4:]
+                        break
+
+                if term_name and mst:
+                    results.append(LegalTermSummary(
+                        lstrm_id=lstrm_id,
+                        term_name=term_name,
+                        mst=mst,
+                    ))
+
+            total = int(search.get("검색결과개수", "0") or "0")
+            if len(results) >= total or len(items) < config.api_display_count:
+                break
+            page += 1
+            time.sleep(self._delay)
+
+        logger.info("legal_term search '%s': %d results", query, len(results))
+        return results
+
+    def get_legal_term_detail(self, mst: str) -> list[LegalTermDetail]:
+        """
+        Fetch legal term detail (definition, source) by MST.
+
+        Endpoint: lawService.do?target=lstrmRltJo&MST=<mst> (XML)
+        Returns the provision content (jo_content) where the term is defined.
+        """
+        root = self._get_xml("lawService.do", {"target": "lstrmRltJo", "MST": mst})
+        if root is None:
+            return []
+
+        # Structure: <lstrmRltJoService><법령용어><법령용어명>...<연계법령><조문내용>...
+        term_el = root.find("법령용어")
+        if term_el is None:
+            logger.warning("legal_term detail MST=%s: <법령용어> not found", mst)
+            return []
+
+        term_name = _xt(term_el, "법령용어명")
+        if not term_name:
+            return []
+
+        # Take the first 연계법령 that has 조문내용
+        for law_el in term_el.findall("연계법령"):
+            definition = _xt(law_el, "조문내용").strip()
+            source = _xt(law_el, "법령명")
+            if definition:
+                logger.info("legal_term detail MST=%s: '%s' from '%s'", mst, term_name, source)
+                return [LegalTermDetail(
+                    lstrm_id=mst,
+                    term_name=term_name,
+                    hanja="",
+                    definition=definition,
+                    source=source,
+                )]
+
+        logger.warning("legal_term detail MST=%s: no 조문내용 found", mst)
+        return []
 
     # ------------------------------------------------------------------
     # Private helpers

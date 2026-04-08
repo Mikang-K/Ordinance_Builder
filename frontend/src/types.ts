@@ -52,3 +52,22 @@ export interface FinalizeResponse {
   legal_issues: LegalIssue[]
   is_legally_valid: boolean | null
 }
+
+export interface SessionSummary {
+  session_id: string
+  title: string
+  stage: Stage
+  created_at: string
+}
+
+export interface SessionStateResponse {
+  session_id: string
+  title: string
+  stage: Stage
+  created_at: string
+  messages: ChatMessage[]
+  draft?: string
+  similar_ordinances?: SimilarOrdinance[]
+  legal_issues?: LegalIssue[]
+  ordinance_info: Record<string, string>
+}

@@ -1,4 +1,4 @@
-import type { SessionCreateResponse, ChatResponse, FinalizeResponse } from './types'
+import type { SessionCreateResponse, ChatResponse, FinalizeResponse, SessionSummary, SessionStateResponse } from './types'
 
 export async function createSession(initialMessage: string): Promise<SessionCreateResponse> {
   const res = await fetch('/api/v1/session', {
@@ -34,5 +34,17 @@ export async function finalizeSession(
     body: JSON.stringify({ draft_text: draftText }),
   })
   if (!res.ok) throw new Error(`확정 요청 실패: ${res.status}`)
+  return res.json()
+}
+
+export async function listSessions(): Promise<SessionSummary[]> {
+  const res = await fetch('/api/v1/sessions')
+  if (!res.ok) throw new Error(`세션 목록 조회 실패: ${res.status}`)
+  return res.json()
+}
+
+export async function getSessionState(sessionId: string): Promise<SessionStateResponse> {
+  const res = await fetch(`/api/v1/session/${sessionId}`)
+  if (!res.ok) throw new Error(`세션 상태 조회 실패: ${res.status}`)
   return res.json()
 }

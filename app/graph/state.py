@@ -59,6 +59,9 @@ class OrdinanceBuilderState(TypedDict):
     # Flat list of provisions from similar ordinances, keyed for article interview examples
     # Each item: {ordinance_id, region_name, ordinance_title, article_no, content_text}
     article_examples: list[dict]
+    # Legal term definitions from the knowledge graph
+    # Each item: {term_name, definition, source_statute}
+    legal_terms: list[dict]
 
     # --- Draft output ---
     draft_articles: list[dict]   # [{"article_no": str, "title": str, "content": str}]

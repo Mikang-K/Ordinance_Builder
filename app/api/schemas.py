@@ -3,6 +3,30 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+class MessageRecord(BaseModel):
+    role: str   # "user" | "ai"
+    text: str
+
+
+class SessionSummary(BaseModel):
+    session_id: str
+    title: str
+    stage: str
+    created_at: str
+
+
+class SessionStateResponse(BaseModel):
+    session_id: str
+    title: str
+    stage: str
+    created_at: str
+    messages: list[MessageRecord]
+    draft: Optional[str] = None
+    similar_ordinances: Optional[list] = None
+    legal_issues: Optional[list] = None
+    ordinance_info: dict = {}
+
+
 class SessionCreateRequest(BaseModel):
     initial_message: Optional[str] = Field(
         None,
