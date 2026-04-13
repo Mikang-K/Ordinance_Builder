@@ -12,7 +12,7 @@ export default function MessageBubble({ message }: Props) {
       <div className={`bubble ${isUser ? 'user-bubble' : 'ai-bubble'}`}>
         {message.text.split('\n').map((line, i) => (
           <span key={i}>
-            {line}
+            {line.split('**').map((part, j) => (j % 2 === 1 ? <strong key={j}>{part}</strong> : part))}
             {i < message.text.split('\n').length - 1 && <br />}
           </span>
         ))}

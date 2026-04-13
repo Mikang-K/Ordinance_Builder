@@ -1,12 +1,15 @@
 export type Stage =
   | 'intent_analysis'
   | 'interviewing'
+  | 'article_interviewing'
+  | 'article_complete'
   | 'retrieving'
   | 'drafting'
   | 'draft_review'
   | 'legal_review_requested'
   | 'legal_checking'
   | 'completed'
+  | 'error'
 
 export interface SimilarOrdinance {
   ordinance_id: string
@@ -44,6 +47,8 @@ export interface ChatResponse {
   legal_issues?: LegalIssue[]
   is_legally_valid?: boolean | null
   similar_ordinances?: SimilarOrdinance[]
+  article_queue?: string[]
+  current_article_key?: string
 }
 
 export interface FinalizeResponse {
@@ -70,4 +75,6 @@ export interface SessionStateResponse {
   similar_ordinances?: SimilarOrdinance[]
   legal_issues?: LegalIssue[]
   ordinance_info: Record<string, string>
+  article_queue?: string[]
+  current_article_key?: string
 }

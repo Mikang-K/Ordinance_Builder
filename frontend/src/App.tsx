@@ -1,12 +1,13 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { ChatMessage, LegalIssue, SimilarOrdinance, Stage } from './types'
-import { createSession, sendMessage, finalizeSession, getSessionState } from './api'
+import { createSession, sendMessage, finalizeSession, getSessionState, submitArticlesBatch } from './api'
 import StageIndicator from './components/StageIndicator'
 import ChatWindow from './components/ChatWindow'
 import DraftModal from './components/DraftModal'
 import LegalIssuesPanel from './components/LegalIssuesPanel'
 import SimilarOrdinancesPanel from './components/SimilarOrdinancesPanel'
 import SessionListScreen from './components/SessionListScreen'
+import ArticleItemsModal from './components/ArticleItemsModal'
 
 export default function App() {
   const [view, setView] = useState<'list' | 'chat'>('list')
@@ -31,7 +32,17 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'chat' | 'result'>('chat')
 
+  // Article Modal State
+  const [articleQueue, setArticleQueue] = useState<string[]>([])
+  const [currentArticleKey, setCurrentArticleKey] = useState<string | null>(null)
+  const [hideArticleModal, setHideArticleModal] = useState(false)
+
   const sessionIdRef = useRef<string | null>(null)
+  const [fontSize, setFontSize] = useState<number>(16)
+
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${fontSize}px`
+  }, [fontSize])
 
   const appendMessage = (msg: ChatMessage) =>
     setMessages((prev) => [...prev, msg])
@@ -44,6 +55,8 @@ export default function App() {
     is_legally_valid?: boolean | null
     is_complete: boolean
     similar_ordinances?: SimilarOrdinance[]
+    article_queue?: string[]
+    current_article_key?: string
   }) => {
     setStage(res.stage as Stage)
     appendMessage({ role: 'ai', text: res.message })
@@ -51,6 +64,10 @@ export default function App() {
     if (res.similar_ordinances && res.similar_ordinances.length > 0) {
       setSimilarOrdinances(res.similar_ordinances)
     }
+
+    if (res.article_queue !== undefined) setArticleQueue(res.article_queue)
+    if (res.current_article_key !== undefined) setCurrentArticleKey(res.current_article_key)
+
 
     // Draft just generated → open the editor modal
     if (res.stage === 'draft_review' && res.draft) {
@@ -158,6 +175,9 @@ export default function App() {
     setCompletedDraft(null)
     setFinalLegalIssues(null)
     setSimilarOrdinances([])
+    setArticleQueue([])
+    setCurrentArticleKey(null)
+    setHideArticleModal(false)
     setError(null)
     setInput('')
     setActiveTab('chat')
@@ -185,6 +205,8 @@ export default function App() {
       if (state.similar_ordinances && state.similar_ordinances.length > 0) {
         setSimilarOrdinances(state.similar_ordinances)
       }
+      if (state.article_queue !== undefined) setArticleQueue(state.article_queue)
+      if (state.current_article_key !== undefined) setCurrentArticleKey(state.current_article_key)
 
       if (state.stage === 'completed') {
         if (state.draft) setCompletedDraft(state.draft)
@@ -206,7 +228,24 @@ export default function App() {
     }
   }
 
+  const handleArticlesSubmit = async (articles: Record<string, string | null>) => {
+    if (!sessionIdRef.current || isLoading) return
+    setError(null)
+    setIsLoading(true)
+    try {
+      const res = await submitArticlesBatch(sessionIdRef.current, articles)
+      applyResponse(res)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '항목 전송에 실패했습니다.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const hasResult = !!(completedDraft || finalLegalIssues)
+
+  const mappedArticles = currentArticleKey ? [currentArticleKey, ...articleQueue] : []
+  const isArticleModalOpen = stage === 'article_interviewing' && mappedArticles.length > 0
 
   if (view === 'list') {
     return (
@@ -226,6 +265,23 @@ export default function App() {
         </div>
         <StageIndicator stage={stage} />
         <div className="header-actions">
+          <div className="font-size-slider" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginRight: '8px' }}>
+            <span style={{ fontSize: '0.85rem', opacity: 0.9 }}>글씨 크기</span>
+            <input 
+              type="range" 
+              min="12" 
+              max="24" 
+              value={fontSize} 
+              onChange={(e) => setFontSize(Number(e.target.value))} 
+              style={{ width: '80px', accentColor: '#ffffff' }}
+              title="글씨 크기 조절"
+            />
+          </div>
+          {isArticleModalOpen && hideArticleModal && (
+            <button className="open-draft-btn" onClick={() => setHideArticleModal(false)}>
+              항목 입력하기
+            </button>
+          )}
           {pendingDraft && !isDraftModalOpen && stage !== 'completed' && (
             <button className="open-draft-btn" onClick={() => setIsDraftModalOpen(true)}>
               초안 편집 · 검증
@@ -273,14 +329,14 @@ export default function App() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="메시지를 입력하세요... (Shift+Enter로 줄바꿈)"
+              placeholder={isArticleModalOpen ? "상세 항목 모달에서 입력을 완료해 주세요." : "메시지를 입력하세요... (Shift+Enter로 줄바꿈)"}
               rows={2}
-              disabled={isLoading}
+              disabled={isLoading || isArticleModalOpen}
             />
             <button
               className="send-btn"
               onClick={handleSend}
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim() || isLoading || isArticleModalOpen}
             >
               전송
             </button>
@@ -317,6 +373,15 @@ export default function App() {
           onRequestLegalReview={handleLegalReview}
           onFinalize={handleFinalize}
           onClose={() => setIsDraftModalOpen(false)}
+        />
+      )}
+
+      {isArticleModalOpen && !hideArticleModal && (
+        <ArticleItemsModal
+          articles={mappedArticles}
+          isLoading={isLoading}
+          onSubmit={handleArticlesSubmit}
+          onClose={() => setHideArticleModal(true)}
         />
       )}
     </div>

@@ -127,21 +127,23 @@ def article_planner_node(state: OrdinanceBuilderState) -> dict:
     template = ARTICLE_TEMPLATES[first_key]
     total = len(article_order)
 
+    intro = (
+        f"기본 정보 수집이 완료되었습니다!\n\n"
+        f"이제 **{region} {purpose} 조례**의 상세 조항 내용을 입력할 차례입니다.\n"
+        f"팝업된 모달 창에서 아래 가이드라인을 참고하여 각 조항을 작성해 주세요.\n"
+        f"(입력하기 어려운 항목은 '기본값' 버튼을 누르면 AI가 자동으로 채워드립니다.)\n\n"
+        f"━━━ **조항 작성 가이드라인** ━━━\n\n"
+    )
+
+    for i, key in enumerate(article_order, 1):
+        template = ARTICLE_TEMPLATES[key]
+        intro += f"**[{i}] {template['title']}**\n{template['question']}\n\n"
+
     # Surface examples from similar ordinances for the first article
     article_examples: list[dict] = list(state.get("article_examples") or [])
     first_examples = find_article_examples(first_key, article_examples)
-    examples_block = format_examples_block(first_examples)
-
-    intro = (
-        f"기본 정보 수집이 완료되었습니다!\n\n"
-        f"이제 **{region} {purpose} 조례**의 각 조항 내용을 하나씩 입력해 주세요.\n"
-        f"총 **{total}개** 조항을 순서대로 작성합니다. "
-        f"(항목을 건너뛰려면 **'기본값'** 이라고 입력하면 AI가 자동으로 채웁니다.)\n\n"
-        f"━━━ **1 / {total}** ━━━\n\n"
-        f"**[{template['title']}]**\n\n"
-        f"{template['question']}"
-        f"{examples_block}"
-    )
+    if first_examples:
+        intro += f"━━━ **참고: 첫 번째 조항({ARTICLE_TEMPLATES[first_key]['title']}) 유사 사례** ━━━\n{format_examples_block(first_examples)}"
 
     return {
         "current_stage": "article_interviewing",

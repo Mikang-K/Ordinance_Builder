@@ -25,6 +25,8 @@ class SessionStateResponse(BaseModel):
     similar_ordinances: Optional[list] = None
     legal_issues: Optional[list] = None
     ordinance_info: dict = {}
+    article_queue: Optional[list[str]] = None
+    current_article_key: Optional[str] = None
 
 
 class SessionCreateRequest(BaseModel):
@@ -66,6 +68,16 @@ class ChatResponse(BaseModel):
     legal_issues: Optional[list] = None      # legal issue list (after each check)
     is_legally_valid: Optional[bool] = None  # True if no HIGH issues found
     similar_ordinances: Optional[list[SimilarOrdinance]] = None  # similar cases from other regions
+    article_queue: Optional[list[str]] = None
+    current_article_key: Optional[str] = None
+
+
+class ArticleBatchRequest(BaseModel):
+    articles: dict[str, Optional[str]] = Field(
+        ...,
+        description="조항 키에 쓰여질 값 목록. 값이 null일 경우 인공지능이 기본값으로 자동 생성함."
+    )
+
 
 
 class FinalizeRequest(BaseModel):

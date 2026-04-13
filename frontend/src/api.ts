@@ -24,6 +24,19 @@ export async function sendMessage(
   return res.json()
 }
 
+export async function submitArticlesBatch(
+  sessionId: string,
+  articles: Record<string, string | null>,
+): Promise<ChatResponse> {
+  const res = await fetch(`/api/v1/session/${sessionId}/articles_batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ articles }),
+  })
+  if (!res.ok) throw new Error(`상세 항목 전송 실패: ${res.status}`)
+  return res.json()
+}
+
 export async function finalizeSession(
   sessionId: string,
   draftText: string,

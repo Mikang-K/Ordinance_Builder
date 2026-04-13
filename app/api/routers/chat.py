@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from langchain_core.messages import HumanMessage
 
 from app.api.schemas import (
+    ArticleBatchRequest,
     ChatRequest,
     ChatResponse,
     FinalizeRequest,
@@ -237,6 +238,60 @@ async def chat(session_id: str, request: ChatRequest):
         similar_ordinances=(
             result.get("similar_ordinances") if stage in _SIMILAR_VISIBLE_STAGES else None
         ),
+        article_queue=result.get("article_queue"),
+        current_article_key=result.get("current_article_key"),
+    )
+
+
+@router.post("/session/{session_id}/articles_batch", response_model=ChatResponse)
+async def submit_articles_batch(session_id: str, request: ArticleBatchRequest):
+    """
+    Submits multiple articles at once via a modal.
+    Skips the rest of the article_interviewing loop and proceeds to drafting.
+    """
+    graph = get_graph()
+    config = {"configurable": {"thread_id": session_id}}
+
+    update: dict[str, Any] = {
+        "user_input": "모달을 통해 항목을 일괄 입력했습니다.",
+        "messages": [HumanMessage(content="[모달을 통한 일괄항목 작성]")],
+        "article_contents": request.articles,
+        "article_queue": [],
+        "current_article_key": None,
+        "current_stage": "article_complete",
+    }
+
+    try:
+        result = graph.invoke(update, config=config)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"워크플로우 오류: {exc}") from exc
+
+    stage: str = result.get("current_stage", "unknown")
+    is_valid: bool | None = result.get("is_legally_valid")
+    is_complete = stage in _COMPLETE_STAGES
+    ai_response = result.get("response_to_user", "")
+
+    if session_id in _sessions_registry:
+        entry = _sessions_registry[session_id]
+        ordinance_info = result.get("ordinance_info", {})
+        entry["stage"] = stage
+        entry["title"] = _derive_title(ordinance_info, entry.get("initial_message", ""))
+        entry["chat_history"].append({"role": "user", "text": "모달을 통해 항목을 일괄 입력했습니다."})
+        entry["chat_history"].append({"role": "ai", "text": ai_response})
+
+    return ChatResponse(
+        session_id=session_id,
+        message=ai_response,
+        stage=stage,
+        is_complete=is_complete,
+        draft=result.get("draft_full_text") if stage in _DRAFT_VISIBLE_STAGES else None,
+        legal_issues=result.get("legal_issues") if stage in _LEGAL_VISIBLE_STAGES else None,
+        is_legally_valid=is_valid if stage in _LEGAL_VISIBLE_STAGES else None,
+        similar_ordinances=(
+            result.get("similar_ordinances") if stage in _SIMILAR_VISIBLE_STAGES else None
+        ),
+        article_queue=result.get("article_queue"),
+        current_article_key=result.get("current_article_key"),
     )
 
 

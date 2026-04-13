@@ -27,6 +27,9 @@ services:
     environment:
       # Override .env value: use Docker service name instead of localhost
       NEO4J_URI: bolt://neo4j:7687
+      CHECKPOINT_DB_PATH: /app/data/sessions.db
+    volumes:
+      - backend_data:/app/data
     depends_on:
       neo4j:
         condition: service_healthy
@@ -41,3 +44,4 @@ services:
 volumes:
   neo4j_data:
   neo4j_logs:
+  backend_data:
