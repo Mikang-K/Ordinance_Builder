@@ -5,6 +5,8 @@ interface Props {
   isLoading: boolean
   onSubmit: (articles: Record<string, string | null>) => void
   onClose: () => void
+  fontSize: number
+  onFontSizeChange: (size: number) => void
 }
 
 const ARTICLE_GUIDES: Record<string, { title: string; hint: string; example?: string }> = {
@@ -56,6 +58,8 @@ export default function ArticleItemsModal({
   isLoading,
   onSubmit,
   onClose,
+  fontSize,
+  onFontSizeChange,
 }: Props) {
   // values: null means "AI default". string means "User Input". undefined means "not evaluated yet".
   const [values, setValues] = useState<Record<string, string | null>>({})
@@ -169,9 +173,9 @@ export default function ArticleItemsModal({
       <div 
         className="draft-modal" 
         style={{ 
-          maxWidth: '960px', 
-          width: '90vw', 
-          height: 'min(80vh, 700px)', 
+          maxWidth: '1200px', 
+          width: '95vw', 
+          height: 'min(90vh, 850px)', 
           borderRadius: '12px',
           display: 'flex',
           flexDirection: 'column',
@@ -187,7 +191,19 @@ export default function ArticleItemsModal({
               ( {currentIndex + 1} / {articles.length} )
             </span>
           </div>
-          <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+          <div className="header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div className="font-size-slider" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginRight: '16px' }}>
+              <span style={{ fontSize: '0.85rem', color: '#64748b' }}>가독성 폭</span>
+              <input 
+                type="range" 
+                min="12" 
+                max="24" 
+                value={fontSize} 
+                onChange={(e) => onFontSizeChange(Number(e.target.value))} 
+                style={{ width: '80px', accentColor: '#1e40af' }}
+                title="글씨 크기 조절"
+              />
+            </div>
             <button
               className="draft-modal-review-btn"
               onClick={handleAllDefaults}

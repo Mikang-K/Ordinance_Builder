@@ -279,7 +279,7 @@ export default function App() {
           </div>
           {isArticleModalOpen && hideArticleModal && (
             <button className="open-draft-btn" onClick={() => setHideArticleModal(false)}>
-              항목 입력하기
+              상세 조항 편집
             </button>
           )}
           {pendingDraft && !isDraftModalOpen && stage !== 'completed' && (
@@ -323,24 +323,37 @@ export default function App() {
             </div>
           )}
 
-          <div className="input-area">
-            <textarea
-              className="message-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={isArticleModalOpen ? "상세 항목 모달에서 입력을 완료해 주세요." : "메시지를 입력하세요... (Shift+Enter로 줄바꿈)"}
-              rows={2}
-              disabled={isLoading || isArticleModalOpen}
-            />
-            <button
-              className="send-btn"
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading || isArticleModalOpen}
-            >
-              전송
-            </button>
-          </div>
+          {isArticleModalOpen && hideArticleModal ? (
+            <div className="input-area" style={{ justifyContent: 'center', background: '#f8fafc', padding: '20px' }}>
+              <button 
+                onClick={() => setHideArticleModal(false)}
+                style={{ padding: '14px 28px', background: '#1e40af', color: 'white', borderRadius: '12px', fontSize: '1rem', fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(30, 64, 175, 0.3)', transition: 'transform 0.1s' }}
+                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                👉 상세 조항 계속 작성하기 (모달 열기)
+              </button>
+            </div>
+          ) : (
+            <div className="input-area">
+              <textarea
+                className="message-input"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={isArticleModalOpen ? "상세 항목 모달에서 입력을 완료해 주세요." : "메시지를 입력하세요... (Shift+Enter로 줄바꿈)"}
+                rows={2}
+                disabled={isLoading || isArticleModalOpen}
+              />
+              <button
+                className="send-btn"
+                onClick={handleSend}
+                disabled={!input.trim() || isLoading || isArticleModalOpen}
+              >
+                전송
+              </button>
+            </div>
+          )}
         </div>
 
         {hasResult && (
@@ -382,6 +395,8 @@ export default function App() {
           isLoading={isLoading}
           onSubmit={handleArticlesSubmit}
           onClose={() => setHideArticleModal(true)}
+          fontSize={fontSize}
+          onFontSizeChange={setFontSize}
         />
       )}
     </div>
