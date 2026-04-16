@@ -32,6 +32,7 @@ class SessionStateResponse(BaseModel):
 class SessionCreateRequest(BaseModel):
     initial_message: Optional[str] = Field(
         None,
+        max_length=4000,
         description="첫 메시지 (없으면 빈 세션 생성 후 별도 /chat 요청)",
     )
 
@@ -51,9 +52,10 @@ class SimilarOrdinance(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., description="사용자 입력 메시지")
+    message: str = Field(..., max_length=4000, description="사용자 입력 메시지")
     draft_text: Optional[str] = Field(
         None,
+        max_length=100_000,
         description="법률 검토를 요청할 조례 텍스트 (사용자가 직접 편집한 버전). "
                     "제공 시 draft_review 단계를 건너뛰고 법률 검토를 즉시 실행.",
     )

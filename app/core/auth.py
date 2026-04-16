@@ -63,5 +63,5 @@ async def get_current_user(authorization: str = Header(...)) -> str:
     except firebase_auth.InvalidIdTokenError:
         raise HTTPException(status_code=401, detail="유효하지 않은 인증 토큰입니다.")
     except Exception as exc:
-        logger.warning("Firebase 토큰 검증 실패: %s", exc)
+        logger.warning("Firebase 토큰 검증 실패: [%s] %s", type(exc).__name__, exc)
         raise HTTPException(status_code=401, detail="인증에 실패했습니다.")

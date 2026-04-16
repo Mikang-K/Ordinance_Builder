@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str
     MAX_INTERVIEW_TURNS: int = 5
     LOG_LEVEL: str = "INFO"
+    DEBUG_MODE: bool = False
     EMBEDDING_MODEL: str = "models/gemini-embedding-001"
 
     # Neo4j

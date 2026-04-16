@@ -1,8 +1,9 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from langchain_core.messages import HumanMessage
 
 from app.api.schemas import (
@@ -18,6 +19,7 @@ from app.api.schemas import (
     SessionSummary,
 )
 from app.core.auth import get_current_user
+from app.core.limiter import limiter
 from app.db.session_store import (
     create_session as db_create_session,
     get_session as db_get_session,
@@ -25,6 +27,8 @@ from app.db.session_store import (
     update_session as db_update_session,
 )
 from app.graph.workflow import get_graph
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["ordinance"])
 
@@ -106,23 +110,24 @@ async def list_sessions(user_id: str = Depends(get_current_user)):
 
 @router.get("/session/{session_id}", response_model=SessionStateResponse)
 async def get_session_state(
-    session_id: str,
+    session_id: uuid.UUID,
     user_id: str = Depends(get_current_user),
 ):
     """세션 메타데이터 및 채팅 기록을 반환합니다 (세션 복원용)."""
-    entry = await db_get_session(session_id)
-    _require_ownership(entry, user_id, session_id)
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
 
     stage = entry["stage"]
     graph = get_graph()
-    config = {"configurable": {"thread_id": session_id}}
+    config = {"configurable": {"thread_id": sid}}
     state_snapshot = await graph.aget_state(config)
     values = (state_snapshot.values or {}) if state_snapshot else {}
 
     chat_history = entry.get("chat_history") or []
 
     return SessionStateResponse(
-        session_id=session_id,
+        session_id=sid,
         title=entry["title"],
         stage=stage,
         created_at=str(entry["created_at"]),
@@ -137,8 +142,10 @@ async def get_session_state(
 
 
 @router.post("/session", response_model=SessionCreateResponse)
+@limiter.limit("20/minute")
 async def create_session(
-    request: SessionCreateRequest,
+    request: Request,
+    body: SessionCreateRequest,
     user_id: str = Depends(get_current_user),
 ):
     """
@@ -150,20 +157,21 @@ async def create_session(
     graph = get_graph()
     config = {"configurable": {"thread_id": session_id}}
     created_at = datetime.now(timezone.utc).isoformat()
-    initial_message = request.initial_message or ""
+    initial_message = body.initial_message or ""
     chat_history: list[dict] = []
 
-    if request.initial_message:
-        chat_history.append({"role": "user", "text": request.initial_message})
+    if body.initial_message:
+        chat_history.append({"role": "user", "text": body.initial_message})
         initial_state = {
             **_DEFAULT_STATE,
-            "user_input": request.initial_message,
-            "messages": [HumanMessage(content=request.initial_message)],
+            "user_input": body.initial_message,
+            "messages": [HumanMessage(content=body.initial_message)],
         }
         try:
             result = await graph.ainvoke(initial_state, config=config)
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"워크플로우 오류: {exc}") from exc
+            logger.exception("워크플로우 오류 발생 (session_id=%s)", session_id)
+            raise HTTPException(status_code=500, detail="워크플로우 처리 중 오류가 발생했습니다.") from exc
 
         stage = result.get("current_stage", "intent_analysis")
         ai_message = result.get("response_to_user", "조례 작성을 시작합니다.")
@@ -204,9 +212,11 @@ async def create_session(
 
 
 @router.post("/session/{session_id}/chat", response_model=ChatResponse)
+@limiter.limit("30/minute")
 async def chat(
-    session_id: str,
-    request: ChatRequest,
+    request: Request,
+    session_id: uuid.UUID,
+    body: ChatRequest,
     user_id: str = Depends(get_current_user),
 ):
     """
@@ -215,25 +225,27 @@ async def chat(
     LangGraph MemorySaver가 thread_id로 이전 상태를 복원하므로
     새 user_input만 전달하면 됩니다.
     """
-    entry = await db_get_session(session_id)
-    _require_ownership(entry, user_id, session_id)
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
 
     graph = get_graph()
-    config = {"configurable": {"thread_id": session_id}}
+    config = {"configurable": {"thread_id": sid}}
 
     update: dict[str, Any] = {
-        "user_input": request.message,
-        "messages": [HumanMessage(content=request.message)],
+        "user_input": body.message,
+        "messages": [HumanMessage(content=body.message)],
     }
 
-    if request.draft_text:
-        update["draft_full_text"] = request.draft_text
+    if body.draft_text:
+        update["draft_full_text"] = body.draft_text
         update["current_stage"] = "legal_review_requested"
 
     try:
         result = await graph.ainvoke(update, config=config)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"워크플로우 오류: {exc}") from exc
+        logger.exception("워크플로우 오류 발생 (session_id=%s)", sid)
+        raise HTTPException(status_code=500, detail="워크플로우 처리 중 오류가 발생했습니다.") from exc
 
     stage: str = result.get("current_stage", "unknown")
     is_valid: bool | None = result.get("is_legally_valid")
@@ -242,18 +254,18 @@ async def chat(
 
     ordinance_info = result.get("ordinance_info", {})
     chat_history = list(entry.get("chat_history") or [])
-    chat_history.append({"role": "user", "text": request.message})
+    chat_history.append({"role": "user", "text": body.message})
     chat_history.append({"role": "ai", "text": ai_response})
 
     await db_update_session(
-        session_id=session_id,
+        session_id=sid,
         stage=stage,
         title=_derive_title(ordinance_info, entry.get("initial_message", "")),
         chat_history=chat_history,
     )
 
     return ChatResponse(
-        session_id=session_id,
+        session_id=sid,
         message=ai_response,
         stage=stage,
         is_complete=is_complete,
@@ -270,16 +282,17 @@ async def chat(
 
 @router.post("/session/{session_id}/articles_batch", response_model=ChatResponse)
 async def submit_articles_batch(
-    session_id: str,
+    session_id: uuid.UUID,
     request: ArticleBatchRequest,
     user_id: str = Depends(get_current_user),
 ):
     """모달을 통한 조항 일괄 입력. 조항 인터뷰를 건너뛰고 바로 초안 생성으로 진행합니다."""
-    entry = await db_get_session(session_id)
-    _require_ownership(entry, user_id, session_id)
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
 
     graph = get_graph()
-    config = {"configurable": {"thread_id": session_id}}
+    config = {"configurable": {"thread_id": sid}}
 
     update: dict[str, Any] = {
         "user_input": "모달을 통해 항목을 일괄 입력했습니다.",
@@ -293,7 +306,8 @@ async def submit_articles_batch(
     try:
         result = await graph.ainvoke(update, config=config)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"워크플로우 오류: {exc}") from exc
+        logger.exception("워크플로우 오류 발생 (session_id=%s)", sid)
+        raise HTTPException(status_code=500, detail="워크플로우 처리 중 오류가 발생했습니다.") from exc
 
     stage: str = result.get("current_stage", "unknown")
     is_valid: bool | None = result.get("is_legally_valid")
@@ -306,14 +320,14 @@ async def submit_articles_batch(
     chat_history.append({"role": "ai", "text": ai_response})
 
     await db_update_session(
-        session_id=session_id,
+        session_id=sid,
         stage=stage,
         title=_derive_title(ordinance_info, entry.get("initial_message", "")),
         chat_history=chat_history,
     )
 
     return ChatResponse(
-        session_id=session_id,
+        session_id=sid,
         message=ai_response,
         stage=stage,
         is_complete=is_complete,
@@ -330,7 +344,7 @@ async def submit_articles_batch(
 
 @router.post("/session/{session_id}/finalize", response_model=FinalizeResponse)
 async def finalize_session(
-    session_id: str,
+    session_id: uuid.UUID,
     request: FinalizeRequest = FinalizeRequest(),
     user_id: str = Depends(get_current_user),
 ):
@@ -340,11 +354,12 @@ async def finalize_session(
     현재 저장된 상태를 읽고 completed로 마킹합니다.
     draft_text가 제공되면 사용자가 최종 편집한 버전을 우선 사용합니다.
     """
-    entry = await db_get_session(session_id)
-    _require_ownership(entry, user_id, session_id)
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
 
     graph = get_graph()
-    config = {"configurable": {"thread_id": session_id}}
+    config = {"configurable": {"thread_id": sid}}
 
     state_snapshot = await graph.aget_state(config)
     values = (state_snapshot.values or {}) if state_snapshot else {}
@@ -364,14 +379,14 @@ async def finalize_session(
 
     chat_history = list(entry.get("chat_history") or [])
     await db_update_session(
-        session_id=session_id,
+        session_id=sid,
         stage="completed",
         title=entry["title"],
         chat_history=chat_history,
     )
 
     return FinalizeResponse(
-        session_id=session_id,
+        session_id=sid,
         draft=final_draft,
         legal_issues=legal_issues,
         is_legally_valid=is_valid,

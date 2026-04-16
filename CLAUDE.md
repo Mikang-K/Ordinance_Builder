@@ -492,15 +492,29 @@ Ordinance_Builder/
 cp .env.example .env
 ```
 
-`.env` 파일에서 아래 항목을 설정합니다:
+**모든 환경 변수는 프로젝트 루트 `.env` 하나에서 관리합니다.**  
+백엔드(`pydantic-settings`)와 프론트엔드(`VITE_*`) 변수가 모두 이 파일에 정의됩니다.
 
 ```env
+# ── 백엔드 ──────────────────────────────────────
 GOOGLE_API_KEY=<Gemini API 키>
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=<Neo4j 비밀번호>
 LAW_API_KEY=<국가법령정보센터 API 키>
+POSTGRES_URL=postgresql://app_user:<password>@localhost:5432/ordinance_builder
+FIREBASE_CREDENTIALS_PATH=./firebase-service-account.json
+
+# ── 프론트엔드 (Firebase Web App) ───────────────
+# Firebase 콘솔 > 프로젝트 설정 > 웹 앱 > SDK 구성
+VITE_FIREBASE_API_KEY=<웹 앱 API 키>
+VITE_FIREBASE_AUTH_DOMAIN=<project-id>.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=<project-id>
 ```
+
+**동작 원리:**
+- **로컬 개발**: `frontend/vite.config.ts`의 `envDir: '../'` 설정으로 Vite가 루트 `.env`에서 `VITE_*` 변수를 읽습니다.
+- **Docker 빌드**: `docker-compose.yml`의 `build.args`가 루트 `.env`의 `VITE_*` 값을 `frontend/Dockerfile`의 `ARG`로 전달합니다.
 
 ### 2. Docker로 전체 실행 (권장)
 

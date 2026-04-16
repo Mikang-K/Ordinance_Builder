@@ -2,12 +2,26 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.routers.chat import router as chat_router
-from app.api.routers.debug import router as debug_router
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.db.session_store import init_db
 from app.graph.workflow import create_workflow, set_graph
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """X-Content-Type-Options, X-Frame-Options, X-XSS-Protection 헤더를 모든 응답에 추가합니다."""
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        return response
 
 
 @asynccontextmanager
@@ -42,12 +56,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Security headers
+app.add_middleware(SecurityHeadersMiddleware)
+
+# CORS — 실제 사용하는 메서드/헤더만 허용
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 app.include_router(chat_router)
-app.include_router(debug_router)
+
+# 디버그 라우터: DEBUG_MODE=true 일 때만 등록 (프로덕션 비노출)
+if settings.DEBUG_MODE:
+    from app.api.routers.debug import router as debug_router
+    app.include_router(debug_router)
