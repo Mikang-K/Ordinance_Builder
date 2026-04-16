@@ -48,3 +48,6 @@ langgraph.json
 
 # Neo4j local data (if running locally)
 neo4j_data/
+
+# Firebase service account (민감 정보 — 절대 커밋 금지)
+firebase-service-account.json

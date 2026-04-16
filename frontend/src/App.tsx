@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import type { ChatMessage, LegalIssue, SimilarOrdinance, Stage } from './types'
 import { createSession, sendMessage, finalizeSession, getSessionState, submitArticlesBatch } from './api'
+import { auth, loginWithGoogle, logout, onAuthStateChanged } from './firebase'
+import type { User } from './firebase'
 import StageIndicator from './components/StageIndicator'
 import ChatWindow from './components/ChatWindow'
 import DraftModal from './components/DraftModal'
@@ -10,6 +12,33 @@ import SessionListScreen from './components/SessionListScreen'
 import ArticleItemsModal from './components/ArticleItemsModal'
 
 export default function App() {
+  // ── 인증 상태 ──────────────────────────────────────────────────────────────
+  const [user, setUser] = useState<User | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser)
+      setAuthLoading(false)
+    })
+    return unsubscribe
+  }, [])
+
+  const handleLogin = async () => {
+    try {
+      await loginWithGoogle()
+    } catch (e) {
+      console.error('로그인 실패:', e)
+    }
+  }
+
+  const handleLogout = async () => {
+    await logout()
+    resetState()
+    setView('list')
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   const [view, setView] = useState<'list' | 'chat'>('list')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
@@ -247,6 +276,35 @@ export default function App() {
   const mappedArticles = currentArticleKey ? [currentArticleKey, ...articleQueue] : []
   const isArticleModalOpen = stage === 'article_interviewing' && mappedArticles.length > 0
 
+  // ── 인증 게이트 ────────────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div style={loginPageStyle}>
+        <p style={{ color: '#6b7280', fontSize: '1rem' }}>인증 확인 중...</p>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div style={loginPageStyle}>
+        <div style={loginCardStyle}>
+          <h1 style={{ margin: '0 0 4px', fontSize: '1.6rem', fontWeight: 700, color: '#1e293b' }}>
+            조례 빌더 AI
+          </h1>
+          <p style={{ margin: '0 0 32px', color: '#64748b', fontSize: '0.95rem' }}>
+            지방 조례 초안 자동 생성 서비스
+          </p>
+          <button onClick={handleLogin} style={googleBtnStyle}>
+            <GoogleIcon />
+            Google 계정으로 로그인
+          </button>
+        </div>
+      </div>
+    )
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   if (view === 'list') {
     return (
       <SessionListScreen
@@ -288,6 +346,17 @@ export default function App() {
             </button>
           )}
           <button className="reset-btn" onClick={handleReset}>목록</button>
+          <div style={userInfoStyle}>
+            {user.photoURL && (
+              <img src={user.photoURL} alt="프로필" style={avatarStyle} referrerPolicy="no-referrer" />
+            )}
+            <span style={{ fontSize: '0.85rem', opacity: 0.9, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user.displayName || user.email}
+            </span>
+            <button className="reset-btn" onClick={handleLogout} style={{ marginLeft: '4px' }}>
+              로그아웃
+            </button>
+          </div>
         </div>
       </header>
 
@@ -400,5 +469,66 @@ export default function App() {
         />
       )}
     </div>
+  )
+}
+
+// ── 로그인 페이지 스타일 ────────────────────────────────────────────────────
+const loginPageStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: '100vh',
+  background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
+}
+
+const loginCardStyle: React.CSSProperties = {
+  background: '#ffffff',
+  borderRadius: '16px',
+  padding: '48px 40px',
+  textAlign: 'center',
+  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.2)',
+  minWidth: '320px',
+}
+
+const googleBtnStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '10px',
+  padding: '12px 24px',
+  background: '#ffffff',
+  border: '1.5px solid #d1d5db',
+  borderRadius: '8px',
+  fontSize: '0.95rem',
+  fontWeight: 600,
+  color: '#374151',
+  cursor: 'pointer',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+  transition: 'box-shadow 0.15s, transform 0.1s',
+}
+
+// ── 헤더 사용자 정보 스타일 ────────────────────────────────────────────────
+const userInfoStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  marginLeft: '8px',
+}
+
+const avatarStyle: React.CSSProperties = {
+  width: '28px',
+  height: '28px',
+  borderRadius: '50%',
+  border: '2px solid rgba(255,255,255,0.6)',
+}
+
+// ── Google 아이콘 SVG ──────────────────────────────────────────────────────
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+    </svg>
   )
 }

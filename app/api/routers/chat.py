@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from langchain_core.messages import HumanMessage
 
 from app.api.schemas import (
@@ -17,12 +17,16 @@ from app.api.schemas import (
     SessionStateResponse,
     SessionSummary,
 )
+from app.core.auth import get_current_user
+from app.db.session_store import (
+    create_session as db_create_session,
+    get_session as db_get_session,
+    list_sessions_by_user,
+    update_session as db_update_session,
+)
 from app.graph.workflow import get_graph
 
 router = APIRouter(prefix="/api/v1", tags=["ordinance"])
-
-# In-memory session registry: session_id → metadata + chat history
-_sessions_registry: dict[str, dict] = {}
 
 
 def _derive_title(ordinance_info: dict, initial_message: str = "") -> str:
@@ -37,6 +41,16 @@ def _derive_title(ordinance_info: dict, initial_message: str = "") -> str:
     elif initial_message:
         return initial_message[:40] + ("..." if len(initial_message) > 40 else "")
     return "새 조례"
+
+
+def _require_ownership(entry: dict | None, user_id: str, session_id: str) -> dict:
+    """세션 존재 여부 및 소유권을 검증합니다. 통과 시 entry 반환."""
+    if entry is None:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+    if entry["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
+    return entry
+
 
 # Stage that indicates the ordinance is fully confirmed by the user
 _COMPLETE_STAGES = {"completed"}
@@ -76,44 +90,43 @@ _DEFAULT_STATE: dict[str, Any] = {
 
 
 @router.get("/sessions", response_model=list[SessionSummary])
-async def list_sessions():
-    """Return all sessions sorted by creation time (newest first)."""
+async def list_sessions(user_id: str = Depends(get_current_user)):
+    """본인의 세션 목록을 생성 시간 역순으로 반환합니다."""
+    rows = await list_sessions_by_user(user_id)
     return [
         SessionSummary(
-            session_id=sid,
-            title=data["title"],
-            stage=data["stage"],
-            created_at=data["created_at"],
+            session_id=r["session_id"],
+            title=r["title"],
+            stage=r["stage"],
+            created_at=str(r["created_at"]),
         )
-        for sid, data in sorted(
-            _sessions_registry.items(),
-            key=lambda x: x[1]["created_at"],
-            reverse=True,
-        )
+        for r in rows
     ]
 
 
 @router.get("/session/{session_id}", response_model=SessionStateResponse)
-async def get_session_state(session_id: str):
-    """Return session metadata and chat history for restoring a session."""
-    if session_id not in _sessions_registry:
-        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+async def get_session_state(
+    session_id: str,
+    user_id: str = Depends(get_current_user),
+):
+    """세션 메타데이터 및 채팅 기록을 반환합니다 (세션 복원용)."""
+    entry = await db_get_session(session_id)
+    _require_ownership(entry, user_id, session_id)
 
-    entry = _sessions_registry[session_id]
     stage = entry["stage"]
-
-    # Also read graph state to get draft / similar_ordinances
     graph = get_graph()
     config = {"configurable": {"thread_id": session_id}}
-    state_snapshot = graph.get_state(config)
+    state_snapshot = await graph.aget_state(config)
     values = (state_snapshot.values or {}) if state_snapshot else {}
+
+    chat_history = entry.get("chat_history") or []
 
     return SessionStateResponse(
         session_id=session_id,
         title=entry["title"],
         stage=stage,
-        created_at=entry["created_at"],
-        messages=[MessageRecord(**m) for m in entry["chat_history"]],
+        created_at=str(entry["created_at"]),
+        messages=[MessageRecord(**m) for m in chat_history],
         draft=values.get("draft_full_text") if stage in _DRAFT_VISIBLE_STAGES else None,
         similar_ordinances=(
             values.get("similar_ordinances") if stage in _SIMILAR_VISIBLE_STAGES else None
@@ -124,12 +137,14 @@ async def get_session_state(session_id: str):
 
 
 @router.post("/session", response_model=SessionCreateResponse)
-async def create_session(request: SessionCreateRequest):
+async def create_session(
+    request: SessionCreateRequest,
+    user_id: str = Depends(get_current_user),
+):
     """
-    Start a new ordinance drafting session.
+    새 조례 초안 세션을 시작합니다.
 
-    Generates a UUID that acts as both the API session_id and the
-    LangGraph MemorySaver thread_id, ensuring state continuity across calls.
+    UUID가 API session_id이자 LangGraph MemorySaver thread_id로 사용됩니다.
     """
     session_id = str(uuid.uuid4())
     graph = get_graph()
@@ -146,7 +161,7 @@ async def create_session(request: SessionCreateRequest):
             "messages": [HumanMessage(content=request.initial_message)],
         }
         try:
-            result = graph.invoke(initial_state, config=config)
+            result = await graph.ainvoke(initial_state, config=config)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"워크플로우 오류: {exc}") from exc
 
@@ -155,28 +170,32 @@ async def create_session(request: SessionCreateRequest):
         ordinance_info = result.get("ordinance_info", {})
         chat_history.append({"role": "ai", "text": ai_message})
 
-        _sessions_registry[session_id] = {
-            "session_id": session_id,
-            "title": _derive_title(ordinance_info, initial_message),
-            "stage": stage,
-            "created_at": created_at,
-            "initial_message": initial_message,
-            "chat_history": chat_history,
-        }
+        await db_create_session(
+            session_id=session_id,
+            user_id=user_id,
+            title=_derive_title(ordinance_info, initial_message),
+            initial_message=initial_message,
+            created_at=created_at,
+        )
+        await db_update_session(
+            session_id=session_id,
+            stage=stage,
+            title=_derive_title(ordinance_info, initial_message),
+            chat_history=chat_history,
+        )
         return SessionCreateResponse(
             session_id=session_id,
             message=ai_message,
             stage=stage,
         )
 
-    _sessions_registry[session_id] = {
-        "session_id": session_id,
-        "title": _derive_title({}, initial_message),
-        "stage": "intent_analysis",
-        "created_at": created_at,
-        "initial_message": initial_message,
-        "chat_history": chat_history,
-    }
+    await db_create_session(
+        session_id=session_id,
+        user_id=user_id,
+        title=_derive_title({}, initial_message),
+        initial_message=initial_message,
+        created_at=created_at,
+    )
     return SessionCreateResponse(
         session_id=session_id,
         message="안녕하세요! 어떤 조례를 작성하고 싶으신가요? 아이디어를 자유롭게 말씀해 주세요.",
@@ -185,31 +204,34 @@ async def create_session(request: SessionCreateRequest):
 
 
 @router.post("/session/{session_id}/chat", response_model=ChatResponse)
-async def chat(session_id: str, request: ChatRequest):
+async def chat(
+    session_id: str,
+    request: ChatRequest,
+    user_id: str = Depends(get_current_user),
+):
     """
-    Continue an existing drafting conversation.
+    기존 세션에서 대화를 계속합니다.
 
-    LangGraph MemorySaver restores the previous state using thread_id,
-    so only the new user_input needs to be provided.
+    LangGraph MemorySaver가 thread_id로 이전 상태를 복원하므로
+    새 user_input만 전달하면 됩니다.
     """
+    entry = await db_get_session(session_id)
+    _require_ownership(entry, user_id, session_id)
+
     graph = get_graph()
     config = {"configurable": {"thread_id": session_id}}
 
-    # Provide only the fields that change on each user turn.
-    # LangGraph merges this update into the checkpointed state.
     update: dict[str, Any] = {
         "user_input": request.message,
         "messages": [HumanMessage(content=request.message)],
     }
 
-    # If the caller supplies draft_text, the user has edited the draft themselves
-    # and wants legal review performed on their version immediately.
     if request.draft_text:
         update["draft_full_text"] = request.draft_text
         update["current_stage"] = "legal_review_requested"
 
     try:
-        result = graph.invoke(update, config=config)
+        result = await graph.ainvoke(update, config=config)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"워크플로우 오류: {exc}") from exc
 
@@ -218,14 +240,17 @@ async def chat(session_id: str, request: ChatRequest):
     is_complete = stage in _COMPLETE_STAGES
     ai_response = result.get("response_to_user", "")
 
-    # Update session registry
-    if session_id in _sessions_registry:
-        entry = _sessions_registry[session_id]
-        ordinance_info = result.get("ordinance_info", {})
-        entry["stage"] = stage
-        entry["title"] = _derive_title(ordinance_info, entry.get("initial_message", ""))
-        entry["chat_history"].append({"role": "user", "text": request.message})
-        entry["chat_history"].append({"role": "ai", "text": ai_response})
+    ordinance_info = result.get("ordinance_info", {})
+    chat_history = list(entry.get("chat_history") or [])
+    chat_history.append({"role": "user", "text": request.message})
+    chat_history.append({"role": "ai", "text": ai_response})
+
+    await db_update_session(
+        session_id=session_id,
+        stage=stage,
+        title=_derive_title(ordinance_info, entry.get("initial_message", "")),
+        chat_history=chat_history,
+    )
 
     return ChatResponse(
         session_id=session_id,
@@ -244,11 +269,15 @@ async def chat(session_id: str, request: ChatRequest):
 
 
 @router.post("/session/{session_id}/articles_batch", response_model=ChatResponse)
-async def submit_articles_batch(session_id: str, request: ArticleBatchRequest):
-    """
-    Submits multiple articles at once via a modal.
-    Skips the rest of the article_interviewing loop and proceeds to drafting.
-    """
+async def submit_articles_batch(
+    session_id: str,
+    request: ArticleBatchRequest,
+    user_id: str = Depends(get_current_user),
+):
+    """모달을 통한 조항 일괄 입력. 조항 인터뷰를 건너뛰고 바로 초안 생성으로 진행합니다."""
+    entry = await db_get_session(session_id)
+    _require_ownership(entry, user_id, session_id)
+
     graph = get_graph()
     config = {"configurable": {"thread_id": session_id}}
 
@@ -262,7 +291,7 @@ async def submit_articles_batch(session_id: str, request: ArticleBatchRequest):
     }
 
     try:
-        result = graph.invoke(update, config=config)
+        result = await graph.ainvoke(update, config=config)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"워크플로우 오류: {exc}") from exc
 
@@ -271,13 +300,17 @@ async def submit_articles_batch(session_id: str, request: ArticleBatchRequest):
     is_complete = stage in _COMPLETE_STAGES
     ai_response = result.get("response_to_user", "")
 
-    if session_id in _sessions_registry:
-        entry = _sessions_registry[session_id]
-        ordinance_info = result.get("ordinance_info", {})
-        entry["stage"] = stage
-        entry["title"] = _derive_title(ordinance_info, entry.get("initial_message", ""))
-        entry["chat_history"].append({"role": "user", "text": "모달을 통해 항목을 일괄 입력했습니다."})
-        entry["chat_history"].append({"role": "ai", "text": ai_response})
+    ordinance_info = result.get("ordinance_info", {})
+    chat_history = list(entry.get("chat_history") or [])
+    chat_history.append({"role": "user", "text": "모달을 통해 항목을 일괄 입력했습니다."})
+    chat_history.append({"role": "ai", "text": ai_response})
+
+    await db_update_session(
+        session_id=session_id,
+        stage=stage,
+        title=_derive_title(ordinance_info, entry.get("initial_message", "")),
+        chat_history=chat_history,
+    )
 
     return ChatResponse(
         session_id=session_id,
@@ -296,22 +329,26 @@ async def submit_articles_batch(session_id: str, request: ArticleBatchRequest):
 
 
 @router.post("/session/{session_id}/finalize", response_model=FinalizeResponse)
-async def finalize_session(session_id: str, request: FinalizeRequest = FinalizeRequest()):
+async def finalize_session(
+    session_id: str,
+    request: FinalizeRequest = FinalizeRequest(),
+    user_id: str = Depends(get_current_user),
+):
     """
-    Confirm and finalize the ordinance draft.
+    조례 초안을 확정합니다.
 
-    Reads the current state from memory, marks the session as completed,
-    and returns the final draft. Optionally accepts a draft_text override
-    (the user's final edited version from the modal).
+    현재 저장된 상태를 읽고 completed로 마킹합니다.
+    draft_text가 제공되면 사용자가 최종 편집한 버전을 우선 사용합니다.
     """
+    entry = await db_get_session(session_id)
+    _require_ownership(entry, user_id, session_id)
+
     graph = get_graph()
     config = {"configurable": {"thread_id": session_id}}
 
-    # Read the current persisted state without running the graph
-    state_snapshot = graph.get_state(config)
+    state_snapshot = await graph.aget_state(config)
     values = (state_snapshot.values or {}) if state_snapshot else {}
 
-    # draft_text from caller takes priority over stored draft
     final_draft = request.draft_text or values.get("draft_full_text", "")
     if not final_draft:
         raise HTTPException(status_code=400, detail="확정할 초안이 없습니다.")
@@ -319,15 +356,19 @@ async def finalize_session(session_id: str, request: FinalizeRequest = FinalizeR
     legal_issues = values.get("legal_issues") or []
     is_valid = values.get("is_legally_valid")
 
-    # Persist the completed stage
     if values:
-        graph.update_state(
+        await graph.aupdate_state(
             config,
             {"current_stage": "completed", "draft_full_text": final_draft},
         )
 
-    if session_id in _sessions_registry:
-        _sessions_registry[session_id]["stage"] = "completed"
+    chat_history = list(entry.get("chat_history") or [])
+    await db_update_session(
+        session_id=session_id,
+        stage="completed",
+        title=entry["title"],
+        chat_history=chat_history,
+    )
 
     return FinalizeResponse(
         session_id=session_id,

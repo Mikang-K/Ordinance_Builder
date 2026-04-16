@@ -1,13 +1,11 @@
-import sqlite3
 from functools import partial
 
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 
 from app.core.config import settings
 from app.core.llm import get_llm
-from app.db.mock_db import MockGraphDB
-from app.db.neo4j_db import Neo4jGraphDB  # uncomment after pipeline load
+from app.db.neo4j_db import Neo4jGraphDB
 from app.graph.edges.conditions import (
     route_after_intent_analysis,
     route_after_graph_retriever,
@@ -26,15 +24,26 @@ from app.graph.nodes.legal_checker import legal_checker_node
 from app.graph.state import OrdinanceBuilderState
 
 # ---------------------------------------------------------------------------
-# Compiled graph singleton
+# Compiled graph singleton — set by main.py lifespan after checkpointer init
 # ---------------------------------------------------------------------------
 _graph_app = None
-_memory: SqliteSaver | None = None
 
 
-def create_workflow():
+def set_graph(compiled_graph) -> None:
+    """lifespan 훅에서 AsyncPostgresSaver 초기화 후 호출."""
+    global _graph_app
+    _graph_app = compiled_graph
+
+
+def get_graph():
+    """컴파일된 그래프 싱글톤 반환."""
+    return _graph_app
+
+
+def create_workflow(checkpointer: AsyncPostgresSaver):
     """
-    Assemble and compile the LangGraph ordinance-drafting workflow.
+    LangGraph 조례 초안 생성 워크플로우를 조립하고 컴파일합니다.
+    checkpointer는 main.py lifespan에서 초기화된 AsyncPostgresSaver를 주입받습니다.
 
     Graph topology:
         START ──[legal_review_requested]──→ legal_checker ──→ END
@@ -50,36 +59,22 @@ def create_workflow():
                             ──[article_complete]──→ drafting_agent ──→ END
 
         legal_checker ──→ END  (user decides: re-check or finalize via /finalize)
-
-    Note: graph_retriever runs BEFORE article_planner so similar-ordinance provision
-    examples are available throughout the entire article interview phase.
-
-    Returns:
-        (compiled_app, memory_saver) tuple
     """
     llm = get_llm()
-
-    # Switch to Neo4jGraphDB after running pipeline/scripts/initial_load.py:
     db = Neo4jGraphDB(settings.NEO4J_URI, settings.NEO4J_USER, settings.NEO4J_PASSWORD)
-    #db = MockGraphDB()
 
     builder: StateGraph = StateGraph(OrdinanceBuilderState)
 
     # Register nodes (inject dependencies via partial)
     builder.add_node("intent_analyzer", partial(intent_analyzer_node, llm=llm))
-    builder.add_node("interviewer", interviewer_node)                         # no LLM
-    builder.add_node("article_planner", article_planner_node)                 # no LLM
-    builder.add_node("article_interviewer", article_interviewer_node)         # no LLM
-    builder.add_node("graph_retriever", partial(graph_retriever_node, db=db)) # no LLM
+    builder.add_node("interviewer", interviewer_node)
+    builder.add_node("article_planner", article_planner_node)
+    builder.add_node("article_interviewer", article_interviewer_node)
+    builder.add_node("graph_retriever", partial(graph_retriever_node, db=db))
     builder.add_node("drafting_agent", partial(drafting_agent_node, llm=llm))
     builder.add_node("draft_reviewer", partial(draft_reviewer_node, llm=llm))
     builder.add_node("legal_checker", partial(legal_checker_node, llm=llm))
 
-    # Entry point routing:
-    # - legal_review_requested → legal_checker (user submitted their own draft)
-    # - draft_review           → draft_reviewer (AI-assisted revision loop)
-    # - article_interviewing   → article_interviewer (per-article Q&A in progress)
-    # - otherwise              → intent_analyzer (normal interview flow)
     builder.add_conditional_edges(
         START,
         route_at_start,
@@ -91,7 +86,6 @@ def create_workflow():
         },
     )
 
-    # Conditional branch: missing fields → interview, otherwise → graph_retriever
     builder.add_conditional_edges(
         "intent_analyzer",
         route_after_intent_analysis,
@@ -101,12 +95,8 @@ def create_workflow():
         },
     )
 
-    # Interviewer suspends execution until the next user message arrives
     builder.add_edge("interviewer", END)
 
-    # graph_retriever runs before article_planner so examples are ready for the interview.
-    # article_queue is None → first run, start article interview
-    # otherwise (interview done or max_turns) → go straight to drafting
     builder.add_conditional_edges(
         "graph_retriever",
         route_after_graph_retriever,
@@ -116,11 +106,8 @@ def create_workflow():
         },
     )
 
-    # Article planner asks the first article question, then suspends
     builder.add_edge("article_planner", END)
 
-    # Article interviewer: more articles → END, all done → drafting_agent directly
-    # (graph_retriever already ran before article_planner)
     builder.add_conditional_edges(
         "article_interviewer",
         route_after_article_interview,
@@ -130,10 +117,8 @@ def create_workflow():
         },
     )
 
-    # Draft → suspend (await user review)
     builder.add_edge("drafting_agent", END)
 
-    # Draft reviewer: confirm → legal check, revise → show updated draft
     builder.add_conditional_edges(
         "draft_reviewer",
         route_after_draft_review,
@@ -143,18 +128,6 @@ def create_workflow():
         },
     )
 
-    # Legal check always ends the turn; user decides to re-check or finalize
     builder.add_edge("legal_checker", END)
 
-    conn = sqlite3.connect(settings.CHECKPOINT_DB_PATH, check_same_thread=False)
-    memory = SqliteSaver(conn)
-    compiled = builder.compile(checkpointer=memory)
-    return compiled, memory
-
-
-def get_graph():
-    """Return the singleton compiled graph, initializing it if needed."""
-    global _graph_app, _memory
-    if _graph_app is None:
-        _graph_app, _memory = create_workflow()
-    return _graph_app
+    return builder.compile(checkpointer=checkpointer)

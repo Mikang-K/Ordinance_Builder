@@ -7,13 +7,17 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     EMBEDDING_MODEL: str = "models/gemini-embedding-001"
 
-    # Neo4j — set these to switch from MockGraphDB to Neo4jGraphDB
+    # Neo4j
     NEO4J_URI: str
     NEO4J_USER: str
     NEO4J_PASSWORD: str
 
-    # SQLite checkpointer — session state is persisted to this file
-    CHECKPOINT_DB_PATH: str = "sessions.db"
+    # PostgreSQL — LangGraph 체크포인터 + 세션 레지스트리 공용
+    # e.g. postgresql://user:pass@host:5432/dbname
+    POSTGRES_URL: str
+
+    # Firebase — 로컬 개발 시 서비스 계정 JSON 경로 지정 (Cloud Run은 ADC 자동 사용)
+    FIREBASE_CREDENTIALS_PATH: str = ""
 
     # CORS — comma-separated origins, or JSON array string
     CORS_ORIGINS: list[str] = [
