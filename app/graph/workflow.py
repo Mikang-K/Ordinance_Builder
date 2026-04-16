@@ -60,20 +60,29 @@ def create_workflow(checkpointer: AsyncPostgresSaver):
 
         legal_checker ──→ END  (user decides: re-check or finalize via /finalize)
     """
-    llm = get_llm()
+    # 노드별 역할에 최적화된 LLM 배정
+    # intent_analyzer : Gemini 2.5 Pro  — 한국어 구조화 추출
+    # drafting_agent  : Claude Opus 4.6 — 장문 법적 문서 작성
+    # draft_reviewer  : Claude Opus 4.6 — 초안 수정 생성
+    # legal_checker   : GPT-4o          — 비판적 법률 분석
+    intent_llm   = get_llm(settings.LLM_INTENT)
+    drafting_llm = get_llm(settings.LLM_DRAFTING)
+    reviewer_llm = get_llm(settings.LLM_REVIEWER)
+    legal_llm    = get_llm(settings.LLM_LEGAL)
+
     db = Neo4jGraphDB(settings.NEO4J_URI, settings.NEO4J_USER, settings.NEO4J_PASSWORD)
 
     builder: StateGraph = StateGraph(OrdinanceBuilderState)
 
     # Register nodes (inject dependencies via partial)
-    builder.add_node("intent_analyzer", partial(intent_analyzer_node, llm=llm))
+    builder.add_node("intent_analyzer", partial(intent_analyzer_node, llm=intent_llm))
     builder.add_node("interviewer", interviewer_node)
     builder.add_node("article_planner", article_planner_node)
     builder.add_node("article_interviewer", article_interviewer_node)
     builder.add_node("graph_retriever", partial(graph_retriever_node, db=db))
-    builder.add_node("drafting_agent", partial(drafting_agent_node, llm=llm))
-    builder.add_node("draft_reviewer", partial(draft_reviewer_node, llm=llm))
-    builder.add_node("legal_checker", partial(legal_checker_node, llm=llm))
+    builder.add_node("drafting_agent", partial(drafting_agent_node, llm=drafting_llm))
+    builder.add_node("draft_reviewer", partial(draft_reviewer_node, llm=reviewer_llm))
+    builder.add_node("legal_checker", partial(legal_checker_node, llm=legal_llm))
 
     builder.add_conditional_edges(
         START,

@@ -1,9 +1,13 @@
+import logging
+
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 from app.graph.state import OrdinanceBuilderState
 from app.prompts.drafting_agent import DRAFTING_SYSTEM, build_drafting_human
+
+logger = logging.getLogger(__name__)
 
 
 class DraftArticle(BaseModel):
@@ -22,7 +26,7 @@ class OrdinanceDraft(BaseModel):
 
 def drafting_agent_node(
     state: OrdinanceBuilderState,
-    llm: ChatGoogleGenerativeAI,
+    llm: BaseChatModel,
 ) -> dict:
     """
     Node 4 – Drafting Agent
@@ -42,6 +46,10 @@ def drafting_agent_node(
     article_contents: dict = state.get("article_contents") or {}
     legal_terms: list[dict] = state.get("legal_terms") or []
 
+    logger.debug(
+        "[drafting_agent] info=%s | legal_basis=%d건 | similar=%d건 | articles=%d건",
+        info, len(legal_basis), len(similar), len(article_contents),
+    )
     human_prompt = build_drafting_human(info, legal_basis, similar, article_contents, legal_terms)
     result: OrdinanceDraft = structured_llm.invoke(
         [("system", DRAFTING_SYSTEM), ("human", human_prompt)]
@@ -71,6 +79,10 @@ def drafting_agent_node(
         f"이상이 없으시면 '확인' 또는 '법률 검증 진행'이라고 입력해 주세요."
     )
 
+    logger.info(
+        "[drafting_agent] 초안 완성 | title=%r | articles=%d개",
+        result.ordinance_title, len(result.articles),
+    )
     return {
         "draft_articles": [
             {"article_no": a.article_no, "title": a.title, "content": a.content}

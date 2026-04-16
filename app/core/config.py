@@ -1,12 +1,23 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     GOOGLE_API_KEY: str
+    OPENAI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
+
     MAX_INTERVIEW_TURNS: int = 5
     LOG_LEVEL: str = "INFO"
     DEBUG_MODE: bool = False
     EMBEDDING_MODEL: str = "models/gemini-embedding-001"
+
+    # 노드별 LLM provider 설정
+    LLM_INTENT: Literal["gemini", "openai", "anthropic"] = "gemini"
+    LLM_DRAFTING: Literal["gemini", "openai", "anthropic"] = "anthropic"
+    LLM_REVIEWER: Literal["gemini", "openai", "anthropic"] = "anthropic"
+    LLM_LEGAL: Literal["gemini", "openai", "anthropic"] = "openai"
 
     # Neo4j
     NEO4J_URI: str

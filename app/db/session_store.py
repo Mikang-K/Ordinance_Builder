@@ -90,6 +90,17 @@ async def list_sessions_by_user(user_id: str) -> list[dict[str, Any]]:
     return rows
 
 
+async def delete_session(session_id: str) -> bool:
+    """세션을 삭제합니다. 삭제된 경우 True, 존재하지 않으면 False를 반환합니다."""
+    async with await psycopg.AsyncConnection.connect(settings.POSTGRES_URL) as conn:
+        result = await conn.execute(
+            "DELETE FROM sessions WHERE session_id = %s",
+            (session_id,),
+        )
+        await conn.commit()
+    return result.rowcount > 0
+
+
 async def update_session(
     *,
     session_id: str,

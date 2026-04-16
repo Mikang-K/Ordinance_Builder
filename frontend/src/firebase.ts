@@ -3,8 +3,9 @@ import {
   GoogleAuthProvider,
   User,
   getAuth,
+  getRedirectResult,
   onAuthStateChanged,
-  signInWithPopup,
+  signInWithRedirect,
   signOut,
 } from 'firebase/auth'
 
@@ -18,9 +19,11 @@ const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const googleProvider = new GoogleAuthProvider()
 
-export const loginWithGoogle = () => signInWithPopup(auth, googleProvider)
+// signInWithPopup 대신 signInWithRedirect 사용
+// — 이유: COOP(Cross-Origin-Opener-Policy) 정책이 팝업의 window.close()를 차단함
+export const loginWithGoogle = () => signInWithRedirect(auth, googleProvider)
 export const logout = () => signOut(auth)
-export { onAuthStateChanged }
+export { onAuthStateChanged, getRedirectResult }
 export type { User }
 
 /**

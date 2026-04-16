@@ -1,11 +1,14 @@
+import logging
 from typing import Literal
 
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 from app.graph.state import OrdinanceBuilderState
 from app.prompts.legal_checker import LEGAL_CHECKER_SYSTEM, build_legal_checker_human
+
+logger = logging.getLogger(__name__)
 
 
 class LegalIssueSchema(BaseModel):
@@ -33,7 +36,7 @@ class LegalCheckResult(BaseModel):
 
 def legal_checker_node(
     state: OrdinanceBuilderState,
-    llm: ChatGoogleGenerativeAI,
+    llm: BaseChatModel,
 ) -> dict:
     """
     Node 5 – Legal Checker
@@ -51,6 +54,7 @@ def legal_checker_node(
     legal_basis: list[dict] = state.get("legal_basis") or []
     legal_terms: list[dict] = state.get("legal_terms") or []
 
+    logger.debug("[legal_checker] draft_len=%d | legal_basis=%d건", len(draft), len(legal_basis))
     human_prompt = build_legal_checker_human(draft, legal_basis, legal_terms)
     result: LegalCheckResult = structured_llm.invoke(
         [("system", LEGAL_CHECKER_SYSTEM), ("human", human_prompt)]
@@ -59,6 +63,14 @@ def legal_checker_node(
     # HIGH severity overrides is_valid even if LLM says True
     has_high = any(i.severity == "HIGH" for i in result.issues)
     is_valid = result.is_valid and not has_high
+
+    counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    for i in result.issues:
+        counts[i.severity] = counts.get(i.severity, 0) + 1
+    logger.info(
+        "[legal_checker] is_valid=%s | HIGH=%d MEDIUM=%d LOW=%d",
+        is_valid, counts["HIGH"], counts["MEDIUM"], counts["LOW"],
+    )
 
     # Build user-facing summary
     if is_valid:

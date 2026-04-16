@@ -1,11 +1,14 @@
+import logging
 from typing import Optional
 
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 from app.graph.state import REQUIRED_FIELDS, OrdinanceBuilderState
 from app.prompts.intent_analyzer import INTENT_ANALYZER_SYSTEM, build_intent_analyzer_human
+
+logger = logging.getLogger(__name__)
 
 
 class ExtractedInfo(BaseModel):
@@ -26,7 +29,7 @@ class ExtractedInfo(BaseModel):
 
 def intent_analyzer_node(
     state: OrdinanceBuilderState,
-    llm: ChatGoogleGenerativeAI,
+    llm: BaseChatModel,
 ) -> dict:
     """
     Node 1 – Intent Analyzer
@@ -46,6 +49,7 @@ def intent_analyzer_node(
         ("human", human_prompt),
     ]
 
+    logger.debug("[intent_analyzer] user_input=%r", state["user_input"])
     extracted: ExtractedInfo = structured_llm.invoke(messages)
 
     # Merge: only overwrite fields that the LLM actually extracted (non-None)
@@ -61,6 +65,11 @@ def intent_analyzer_node(
     # Recalculate missing fields based on actual values (LLM hint is advisory only)
     missing = [f for f in REQUIRED_FIELDS if not updated_info.get(f)]
 
+    logger.info(
+        "[intent_analyzer] extracted=%s | missing=%s",
+        {k: v for k, v in updated_info.items() if v},
+        missing,
+    )
     return {
         "ordinance_info": updated_info,
         "missing_fields": missing,

@@ -1,7 +1,8 @@
+import logging
 from typing import Literal as TypingLiteral
 
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 from app.graph.nodes.drafting_agent import DraftArticle, OrdinanceDraft
@@ -12,6 +13,8 @@ from app.prompts.draft_reviewer import (
     build_draft_reviewer_human,
     build_draft_revision_human,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ReviewDecision(BaseModel):
@@ -24,7 +27,7 @@ class ReviewDecision(BaseModel):
 
 def draft_reviewer_node(
     state: OrdinanceBuilderState,
-    llm: ChatGoogleGenerativeAI,
+    llm: BaseChatModel,
 ) -> dict:
     """
     Node – Draft Reviewer
@@ -44,11 +47,13 @@ def draft_reviewer_node(
 
     # Step 1: Classify user intent (confirm vs revise)
     classifier_llm = llm.with_structured_output(ReviewDecision)
+    logger.debug("[draft_reviewer] user_input=%r", user_input)
     decision_result: ReviewDecision = classifier_llm.invoke([
         ("system", DRAFT_REVIEWER_SYSTEM),
         ("human", build_draft_reviewer_human(user_input, draft_full_text)),
     ])
     decision = decision_result.decision
+    logger.info("[draft_reviewer] decision=%s", decision)
 
     if decision == "confirm":
         response = "확인되었습니다. 법률 검증을 시작합니다."
@@ -60,6 +65,7 @@ def draft_reviewer_node(
         }
 
     # Step 2 (revise): Apply changes using a second LLM call
+    logger.debug("[draft_reviewer] revise 요청 — 수정 생성 시작")
     reviser_llm = llm.with_structured_output(OrdinanceDraft)
     revised: OrdinanceDraft = reviser_llm.invoke([
         ("system", DRAFT_REVISION_SYSTEM),
@@ -79,6 +85,7 @@ def draft_reviewer_node(
         f"수정된 초안을 확인하신 후 법률 검증 진행을 요청해 주세요."
     )
 
+    logger.info("[draft_reviewer] 수정 완료 | title=%r | articles=%d개", revised.ordinance_title, len(revised.articles))
     return {
         "draft_articles": [
             {"article_no": a.article_no, "title": a.title, "content": a.content}

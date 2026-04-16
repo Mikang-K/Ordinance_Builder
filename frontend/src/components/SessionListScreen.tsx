@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { SessionSummary } from '../types'
-import { listSessions } from '../api'
+import { listSessions, deleteSession } from '../api'
+import type { User } from '../firebase'
 
 interface Props {
   onSelectSession: (sessionId: string) => void
   onNewSession: () => void
+  user?: User | null
+  onLogout?: () => void
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -30,10 +33,11 @@ function formatDate(iso: string): string {
   })
 }
 
-export default function SessionListScreen({ onSelectSession, onNewSession }: Props) {
+export default function SessionListScreen({ onSelectSession, onNewSession, user, onLogout }: Props) {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     listSessions()
@@ -42,9 +46,35 @@ export default function SessionListScreen({ onSelectSession, onNewSession }: Pro
       .finally(() => setIsLoading(false))
   }, [])
 
+  const handleDelete = async (sessionId: string, title: string) => {
+    if (!window.confirm(`"${title}" 세션을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`)) return
+    setDeletingId(sessionId)
+    try {
+      await deleteSession(sessionId)
+      setSessions((prev) => prev.filter((s) => s.session_id !== sessionId))
+    } catch {
+      setError('세션 삭제에 실패했습니다. 다시 시도해 주세요.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   return (
     <div className="session-list-screen">
       <div className="session-list-hero">
+        {user && onLogout && (
+          <div className="session-list-user">
+            {user.photoURL && (
+              <img src={user.photoURL} alt="프로필" className="session-list-avatar" referrerPolicy="no-referrer" />
+            )}
+            <span className="session-list-username">
+              {user.displayName || user.email}
+            </span>
+            <button className="session-list-logout-btn" onClick={onLogout}>
+              로그아웃
+            </button>
+          </div>
+        )}
         <h1 className="session-list-title">조례 빌더 AI</h1>
         <p className="session-list-subtitle">지방 조례 초안 자동 생성 서비스</p>
         <button className="new-session-btn" onClick={onNewSession}>
@@ -82,12 +112,23 @@ export default function SessionListScreen({ onSelectSession, onNewSession }: Pro
                       <span className="session-card-date">{formatDate(s.created_at)}</span>
                     </div>
                   </div>
-                  <button
-                    className="session-resume-btn"
-                    onClick={() => onSelectSession(s.session_id)}
-                  >
-                    계속 작성
-                  </button>
+                  <div className="session-card-actions">
+                    <button
+                      className="session-resume-btn"
+                      onClick={() => onSelectSession(s.session_id)}
+                      disabled={deletingId === s.session_id}
+                    >
+                      계속 작성
+                    </button>
+                    <button
+                      className="session-delete-btn"
+                      onClick={() => handleDelete(s.session_id, s.title)}
+                      disabled={deletingId === s.session_id}
+                      aria-label="세션 삭제"
+                    >
+                      {deletingId === s.session_id ? '삭제 중…' : '삭제'}
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

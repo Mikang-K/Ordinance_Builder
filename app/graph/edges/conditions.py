@@ -16,6 +16,8 @@ def route_at_start(state: OrdinanceBuilderState) -> RouteAtStart:
     - legal_review_requested: user submitted their own draft_text → skip to legal_checker
     - draft_review:           AI draft awaiting user review → draft_reviewer
     - article_interviewing:   per-article Q&A in progress → article_interviewer
+    - article_complete:       all articles collected (e.g. from articles_batch) →
+                              article_interviewer detects empty queue → routes to drafting_agent
     - otherwise:              begin from intent_analyzer as normal
     """
     current_stage: str = state.get("current_stage") or "intent_analysis"
@@ -23,7 +25,7 @@ def route_at_start(state: OrdinanceBuilderState) -> RouteAtStart:
         return "legal_checker"
     if current_stage == "draft_review":
         return "draft_reviewer"
-    if current_stage == "article_interviewing":
+    if current_stage in ("article_interviewing", "article_complete"):
         return "article_interviewer"
     return "intent_analyzer"
 

@@ -2,30 +2,7 @@
 
 > 대화형 AI를 통해 지자체별 특수성을 반영하고, 상위법령을 준수하는 **지방 조례 초안**을 단계별로 생성·검토하는 풀스택 AI 서비스
 
----
-
-## 목차
-
-1. [프로젝트 소개](#프로젝트-소개)
-2. [핵심 기능](#핵심-기능)
-3. [시스템 아키텍처](#시스템-아키텍처)
-4. [LangGraph 워크플로우](#langgraph-워크플로우)
-5. [OWL 온톨로지 설계](#owl-온톨로지-설계)
-6. [데이터베이스 스키마](#데이터베이스-스키마)
-7. [ETL 파이프라인](#etl-파이프라인)
-8. [프로젝트 구조](#프로젝트-구조)
-9. [기술 스택](#기술-스택)
-10. [시작하기](#시작하기)
-11. [API 명세](#api-명세)
-12. [로드맵](#로드맵)
-
----
-
 ## 프로젝트 소개
-
-지방 조례는 법적 형식 요건과 상위법 정합성을 모두 충족해야 하지만, 실무 담당자가 법률 전문 지식 없이 초안을 작성하는 것은 매우 어렵습니다.
-
-**조례 빌더 AI**는 이 문제를 해결하기 위해:
 
 - **대화형 인터뷰**: 사용자가 자연어로 아이디어를 입력하면 AI가 필수 정보를 단계적으로 수집
 - **그래프 기반 법령 검색**: Neo4j Graph DB에서 관련 상위법·유사 조례를 의미적으로 탐색
@@ -50,13 +27,6 @@
 ### 1. 대화형 조례 인터뷰
 
 필수 4개 필드(`region`, `purpose`, `target_group`, `support_type`)가 모두 확보될 때까지 자연어로 반복 질문합니다. Gemini가 사용자 입력에서 정보를 자동 추출하므로, 구조화된 폼 없이 자유로운 대화가 가능합니다.
-
-```
-사용자: "서울시 청년 창업 지원 조례를 만들고 싶어요"
-  → region: 서울특별시, purpose: 청년 창업 지원 (자동 추출)
-  → 누락: target_group, support_type
-AI: "지원 대상 연령 범위와 지원 방식(보조금/공간/멘토링 등)을 알려주세요."
-```
 
 ### 2. 조항별 세부 인터뷰
 
@@ -197,14 +167,14 @@ class OrdinanceBuilderState(TypedDict):
 
 | 노드 | LLM | 기능 | 출력 |
 |------|-----|------|------|
-| `intent_analyzer` | Gemini | 자연어 입력 → 필드 추출 (`ExtractedInfo` 구조화 출력) | `ordinance_info`, `missing_fields` |
+| `intent_analyzer` | Gemini 2.5 Pro | 자연어 입력 → 필드 추출 (`ExtractedInfo` 구조화 출력) | `ordinance_info`, `missing_fields` |
 | `interviewer` | 없음 | 미수집 필드 질문 생성 (최대 2개씩) | `response_to_user` |
 | `graph_retriever` | 없음 | Neo4j 쿼리: 상위법 + 유사조례 + 조문 예시 | `legal_basis`, `similar_ordinances` |
 | `article_planner` | 없음 | 9개 조항 순서 정의 + 첫 질문 | `article_queue` |
 | `article_interviewer` | 없음 | 조항별 답변 수집, "기본값" → None 처리 | `article_contents`, `current_stage` |
-| `drafting_agent` | Gemini | 조례 초안 생성 (`OrdinanceDraft`) | `draft_full_text` |
-| `draft_reviewer` | Gemini | 피드백 분류 + 수정 적용 | `draft_review_decision` |
-| `legal_checker` | Gemini | 상위법 충돌 검증 (`LegalCheckResult`) | `legal_issues`, `is_legally_valid` |
+| `drafting_agent` | Claude Opus 4.6 | 조례 초안 생성 (`OrdinanceDraft`) | `draft_full_text` |
+| `draft_reviewer` | Claude Opus 4.6 | 피드백 분류 + 수정 적용 | `draft_review_decision` |
+| `legal_checker` | GPT-4o | 상위법 충돌 검증 (`LegalCheckResult`) | `legal_issues`, `is_legally_valid` |
 
 ### 조건부 분기 (edges/conditions.py)
 
@@ -236,7 +206,7 @@ after_draft_reviewer(state) →
 
 ## OWL 온톨로지 설계
 
-법령 도메인의 개념 체계를 **Protégé**로 모델링한 OWL 온톨로지(`ordinance.rdf`)입니다. Neo4j 그래프 스키마의 개념적 기반이 되며, Phase 3에서 SWRL 논리 규칙 추론에 활용할 예정입니다.
+법령 도메인의 개념 체계를 **Protégé**로 모델링한 OWL 온톨로지(`ordinance.rdf`)입니다. Neo4j 그래프 스키마의 개념적 기반이 되며, Phase 3에서 SWRL 논리 규칙 추론에 활용.
 
 ### 클래스 계층 구조
 
@@ -394,9 +364,9 @@ Ordinance_Builder/
 │   │       ├── chat.py                 # POST /api/v1/session, /chat, /finalize
 │   │       └── debug.py                # 디버그 엔드포인트
 │   ├── core/
-│   │   ├── config.py                   # 환경 변수 설정 (pydantic-settings)
-│   │   ├── llm.py                      # Gemini 2.5 Pro 싱글톤
-│   │   └── embedder.py                 # Gemini 임베딩 클라이언트
+│   │   ├── config.py                   # 환경 변수 설정 (pydantic-settings) — LLM_* 노드별 provider 포함
+│   │   ├── llm.py                      # provider별 캐싱 팩토리 get_llm(provider) — Gemini/OpenAI/Anthropic
+│   │   └── embedder.py                 # Gemini 임베딩 클라이언트 (Neo4j 벡터 인덱스 고정)
 │   ├── db/
 │   │   ├── base.py                     # GraphDBInterface (ABC)
 │   │   ├── mock_db.py                  # MockGraphDB (개발/테스트용)
@@ -465,196 +435,13 @@ Ordinance_Builder/
 
 | 계층 | 기술 | 역할 |
 |------|------|------|
-| **LLM** | Gemini 2.5 Pro (`langchain-google-genai`) | 정보 추출, 초안 생성, 법률 검증 |
-| **Embedding** | `models/gemini-embedding-001` (3072d) | 조문 의미 검색 |
+| **LLM (정보 추출)** | Gemini 2.5 Pro (`langchain-google-genai`) | `intent_analyzer` — 한국어 구조화 추출 |
+| **LLM (초안 생성·검토)** | Claude Opus 4.6 (`langchain-anthropic`) | `drafting_agent`, `draft_reviewer` — 장문 법적 문서 작성·수정 |
+| **LLM (법률 검증)** | GPT-4o (`langchain-openai`) | `legal_checker` — 비판적 법률 분석·충돌 검증 |
+| **Embedding** | `models/gemini-embedding-001` (3072d) | 조문 의미 검색 (Neo4j 벡터 인덱스 고정) |
 | **Orchestration** | LangGraph + LangChain | 상태 기반 멀티노드 워크플로우 |
 | **Backend** | FastAPI + Uvicorn | REST API 서버 |
 | **Frontend** | React 18 + TypeScript + Vite | 대화형 UI |
 | **Graph DB** | Neo4j 5.23 (Docker) → Neo4j AuraDB (프로덕션) | 법령 관계 그래프 |
 | **ETL** | 국가법령정보센터 Open API + 자체 파이프라인 | 법령·조례 데이터 수집 |
 | **배포** | Docker Compose (로컬) / Cloud Functions + AuraDB (예정) | 컨테이너 기반 배포 |
-
----
-
-## 시작하기
-
-### 사전 요구사항
-
-- Docker & Docker Compose
-- Python 3.11+
-- Node.js 18+
-- [국가법령정보센터 Open API 키](https://open.law.go.kr)
-- Google Gemini API 키
-
-### 1. 환경 변수 설정
-
-```bash
-cp .env.example .env
-```
-
-`.env` 파일에서 아래 항목을 설정합니다:
-
-```env
-GOOGLE_API_KEY=<Gemini API 키>
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=<Neo4j 비밀번호>
-LAW_API_KEY=<국가법령정보센터 API 키>
-```
-
-### 2. Docker로 전체 실행 (권장)
-
-```bash
-docker compose up -d
-```
-
-| 서비스 | 주소 |
-|--------|------|
-| Frontend | http://localhost:3000 |
-| Backend API | http://localhost:8000 |
-| Neo4j Browser | http://localhost:7474 |
-
-### 3. 로컬 개발 실행
-
-```bash
-# Neo4j만 Docker로 실행
-docker compose up -d neo4j
-
-# Backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-
-# Frontend
-cd frontend
-npm install
-npm run dev       # http://localhost:5173
-```
-
-### 4. 데이터 파이프라인 실행 (최초 1회)
-
-```bash
-# 국가법령정보센터 → Neo4j 전체 적재 (4단계)
-# Phase 1: 필수 법령 6개 적재
-# Phase 2: 도메인 키워드 기반 법령 검색 및 적재
-# Phase 3: 도메인 키워드 기반 조례 검색 및 적재
-# Phase 4: 노드 간 관계 구축 + 전체 벡터 임베딩 생성
-python -m pipeline.scripts.initial_load
-
-# 이후 주기적 증분 업데이트
-python -m pipeline.scripts.incremental_update
-```
-
-### 5. Mock DB로 빠른 테스트
-
-파이프라인 없이 바로 테스트하려면 `app/graph/workflow.py`에서:
-
-```python
-# Neo4jGraphDB() 주석 처리
-# MockGraphDB() 주석 해제
-```
-
----
-
-## API 명세
-
-### 세션 생성
-
-```
-POST /api/v1/session
-```
-
-```json
-// Request
-{ "initial_message": "서울시 청년 창업 지원 조례를 만들고 싶어요" }
-
-// Response
-{
-  "session_id": "uuid-v4",
-  "message": "조례 작성을 시작하겠습니다. 지원 대상 연령 범위를 알려주세요.",
-  "stage": "interviewing"
-}
-```
-
-### 대화 (조례 생성 진행)
-
-```
-POST /api/v1/session/{session_id}/chat
-```
-
-```json
-// Request
-{
-  "message": "만 19세에서 39세 청년이요",
-  "draft_text": null   // 사용자가 직접 편집한 초안 (draft_review 단계에서 사용)
-}
-
-// Response
-{
-  "session_id": "uuid-v4",
-  "message": "AI 응답 메시지",
-  "stage": "article_interviewing",
-  "is_complete": false,
-  "draft": null,
-  "legal_issues": [],
-  "is_legally_valid": null,
-  "similar_ordinances": [
-    {
-      "ordinance_id": "...",
-      "region_name": "부산광역시",
-      "title": "부산광역시 청년 창업 지원 조례",
-      "similarity_score": 0.92,
-      "relevance_reason": "지원 대상 및 방식이 유사"
-    }
-  ]
-}
-```
-
-### 조례 확정
-
-```
-POST /api/v1/session/{session_id}/finalize
-```
-
-```json
-// Request
-{ "draft_text": "최종 편집된 초안 전문" }
-
-// Response
-{
-  "session_id": "uuid-v4",
-  "draft": "최종 조례 초안 전문",
-  "legal_issues": [
-    {
-      "severity": "MEDIUM",
-      "related_statute": "보조금 관리에 관한 법률 제22조",
-      "description": "보조금 지급 상한선 명시 권장",
-      "suggestion": "제5조에 연간 1인당 지급 한도액 추가"
-    }
-  ],
-  "is_legally_valid": true
-}
-```
-
-### `stage` 값 참조
-
-| 값 | 설명 |
-|----|------|
-| `intent_analysis` | 사용자 입력 분석 중 |
-| `interviewing` | 필수 정보 수집 인터뷰 중 |
-| `retrieving` | Graph DB 법적 근거 검색 중 |
-| `article_interviewing` | 조항별 세부 내용 인터뷰 중 |
-| `draft_review` | AI 초안 검토 완료, 사용자 확인 대기 |
-| `legal_review_requested` | 사용자 제출 초안 법률 검증 요청 |
-| `legal_checking` | 법률 검증 진행 중 |
-| `completed` | 조례 초안 완성 |
-
----
-
-## 로드맵
-
-| 단계 | 내용 | 상태 |
-|------|------|------|
-| **Phase 1** | LangGraph State + 노드 구조 + FastAPI 뼈대 + React 프론트엔드 | ✅ 완료 |
-| **Phase 2** | 국가법령정보센터 API 파이프라인 → Neo4j 적재 + 관계 구축 + 벡터 인덱스 | ✅ 완료 |
-| **Phase 3** | Protégé 기반 SWRL 논리 규칙(추론) 반영 | 예정 |
-| **Phase 4** | 법률 전문가 검토 피드백 반영 및 인간 협업 인터페이스 고도화 | 예정 |

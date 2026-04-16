@@ -1,3 +1,5 @@
+import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,8 +11,30 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.routers.chat import router as chat_router
 from app.core.config import settings
 from app.core.limiter import limiter
+from app.core.logging_config import setup_logging
 from app.db.session_store import init_db
 from app.graph.workflow import create_workflow, set_graph
+
+setup_logging(settings.LOG_LEVEL)
+logger = logging.getLogger(__name__)
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """모든 요청/응답에 대해 메서드, 경로, 상태코드, 소요 시간을 기록합니다."""
+
+    async def dispatch(self, request, call_next):
+        start = time.perf_counter()
+        logger.info("→ %s %s", request.method, request.url.path)
+        response = await call_next(request)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            "← %s %s [%d] %.0fms",
+            request.method,
+            request.url.path,
+            response.status_code,
+            elapsed_ms,
+        )
+        return response
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -59,6 +83,9 @@ app = FastAPI(
 # Rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Request/response logging
+app.add_middleware(RequestLoggingMiddleware)
 
 # Security headers
 app.add_middleware(SecurityHeadersMiddleware)

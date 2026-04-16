@@ -708,6 +708,7 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
 }
 
 .session-list-hero {
+  position: relative;
   width: 100%;
   background: #1e40af;
   color: white;
@@ -728,6 +729,47 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   font-size: 1rem;
   opacity: 0.8;
   margin-bottom: 12px;
+}
+
+.session-list-user {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-list-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.6);
+}
+
+.session-list-username {
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.9);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-list-logout-btn {
+  padding: 5px 12px;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.session-list-logout-btn:hover {
+  background: rgba(255,255,255,0.25);
 }
 
 .new-session-btn {
@@ -862,10 +904,36 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   transition: background 0.15s;
 }
 .session-resume-btn:hover { background: #1d4ed8; }
+.session-resume-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.session-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.session-delete-btn {
+  padding: 8px 14px;
+  background: transparent;
+  color: #ef4444;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.session-delete-btn:hover { background: #fef2f2; border-color: #ef4444; }
+.session-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 @media (max-width: 480px) {
   .session-list-hero { padding: 40px 20px 36px; }
   .session-list-title { font-size: 1.5rem; }
   .session-card { flex-direction: column; align-items: flex-start; }
-  .session-resume-btn { width: 100%; text-align: center; }
+  .session-card-actions { width: 100%; }
+  .session-resume-btn { flex: 1; text-align: center; }
+  .session-delete-btn { flex-shrink: 0; }
 }

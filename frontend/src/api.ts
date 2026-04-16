@@ -80,3 +80,11 @@ export async function getSessionState(sessionId: string): Promise<SessionStateRe
   if (!res.ok) throw new Error(`세션 상태 조회 실패: ${res.status}`)
   return res.json()
 }
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  const res = await fetch(`/api/v1/session/${sessionId}`, {
+    method: 'DELETE',
+    headers: await authHeaders(),
+  })
+  if (!res.ok) throw new Error(`세션 삭제 실패: ${res.status}`)
+}

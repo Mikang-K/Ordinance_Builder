@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { ChatMessage, LegalIssue, SimilarOrdinance, Stage } from './types'
 import { createSession, sendMessage, finalizeSession, getSessionState, submitArticlesBatch } from './api'
-import { auth, loginWithGoogle, logout, onAuthStateChanged } from './firebase'
+import { auth, loginWithGoogle, logout, onAuthStateChanged, getRedirectResult } from './firebase'
 import type { User } from './firebase'
 import StageIndicator from './components/StageIndicator'
 import ChatWindow from './components/ChatWindow'
@@ -17,6 +17,9 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
+    // signInWithRedirect 후 돌아왔을 때 pending 결과 처리 (에러만 로깅)
+    getRedirectResult(auth).catch((e) => console.error('redirect auth error:', e))
+
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser)
       setAuthLoading(false)
@@ -310,6 +313,8 @@ export default function App() {
       <SessionListScreen
         onSelectSession={handleSelectSession}
         onNewSession={handleNewSession}
+        user={user}
+        onLogout={handleLogout}
       />
     )
   }

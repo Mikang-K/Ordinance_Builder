@@ -22,6 +22,7 @@ from app.core.auth import get_current_user
 from app.core.limiter import limiter
 from app.db.session_store import (
     create_session as db_create_session,
+    delete_session as db_delete_session,
     get_session as db_get_session,
     list_sessions_by_user,
     update_session as db_update_session,
@@ -106,6 +107,18 @@ async def list_sessions(user_id: str = Depends(get_current_user)):
         )
         for r in rows
     ]
+
+
+@router.delete("/session/{session_id}", status_code=204)
+async def delete_session(
+    session_id: uuid.UUID,
+    user_id: str = Depends(get_current_user),
+):
+    """세션을 삭제합니다. 소유자만 삭제할 수 있습니다."""
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
+    await db_delete_session(sid)
 
 
 @router.get("/session/{session_id}", response_model=SessionStateResponse)
