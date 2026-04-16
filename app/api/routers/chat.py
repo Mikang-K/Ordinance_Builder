@@ -208,6 +208,8 @@ async def create_session(
             session_id=session_id,
             message=ai_message,
             stage=stage,
+            article_queue=result.get("article_queue"),
+            current_article_key=result.get("current_article_key"),
         )
 
     await db_create_session(

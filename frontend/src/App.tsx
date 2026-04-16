@@ -88,7 +88,7 @@ export default function App() {
     is_complete: boolean
     similar_ordinances?: SimilarOrdinance[]
     article_queue?: string[]
-    current_article_key?: string
+    current_article_key?: string | null
   }) => {
     setStage(res.stage as Stage)
     appendMessage({ role: 'ai', text: res.message })

@@ -36,6 +36,8 @@ export interface SessionCreateResponse {
   session_id: string
   message: string
   stage: Stage
+  article_queue?: string[]
+  current_article_key?: string | null
 }
 
 export interface ChatResponse {
@@ -48,7 +50,7 @@ export interface ChatResponse {
   is_legally_valid?: boolean | null
   similar_ordinances?: SimilarOrdinance[]
   article_queue?: string[]
-  current_article_key?: string
+  current_article_key?: string | null
 }
 
 export interface FinalizeResponse {
@@ -76,5 +78,5 @@ export interface SessionStateResponse {
   legal_issues?: LegalIssue[]
   ordinance_info: Record<string, string>
   article_queue?: string[]
-  current_article_key?: string
+  current_article_key?: string | null
 }

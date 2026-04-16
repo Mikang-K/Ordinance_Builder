@@ -538,11 +538,17 @@ def route_at_start(state) -> RouteAtStart:
 
 | 엔드포인트 | 주입하는 `current_stage` | `route_at_start` 처리 |
 |-----------|--------------------------|----------------------|
+| `POST /session` (initial_message 포함) | (주입 없음, 첫 실행) | `intent_analyzer`부터 실행 |
 | `/chat` (일반) | (주입 없음, 체크포인트 값 유지) | 체크포인트 stage에 따라 분기 |
 | `/chat` (draft_text 포함) | `"legal_review_requested"` | `legal_checker` |
 | `/articles_batch` | `"article_complete"` | `article_interviewer` |
 | `/finalize` | `graph.aupdate_state`로 `"completed"` 직접 설정 | 그래프 미경유 |
 | `DELETE /session/{id}` | — (그래프 미경유) | PostgreSQL 레코드만 삭제 |
+
+> **⚠️ `SessionCreateResponse` 필드 누락 주의**: 기본정보를 한 번에 입력하면 그래프가
+> `article_planner`까지 실행되며 `article_queue`, `current_article_key`가 설정됩니다.
+> 이 값이 `SessionCreateResponse`에 없으면 프론트엔드 조항 모달이 열리지 않습니다.
+> **→ 자세한 원인·수정 위치는 개발 시 주의사항 §7 참조.**
 
 ### 3. 멀티 LLM 지원 — 노드별 provider 및 API 키
 
@@ -568,38 +574,6 @@ const isArticleModalOpen = stage === 'article_interviewing' && mappedArticles.le
 // mappedArticles = currentArticleKey ? [currentArticleKey, ...articleQueue] : []
 // → currentArticleKey가 null이면 모달 미표시
 ```
-
-### 6. 조항 수집 경로 — 점진적 입력 vs. 일괄 입력
-
-조항을 하나씩 입력하면 DraftModal이 열리는데, ArticleItemsModal로 한 번에 제출하면 모달이 열리지 않는 경우의 원인과 올바른 흐름입니다.
-
-| 경로 | 엔드포인트 | 주입 `current_stage` | 워크플로우 |
-|------|-----------|----------------------|-----------|
-| 점진적 (하나씩) | `/chat` | `"article_interviewing"` (체크포인트 유지) | `article_interviewer` → 큐 소진 → `drafting_agent` |
-| 일괄 (ArticleItemsModal) | `/articles_batch` | `"article_complete"` + `article_queue=[]` | `article_interviewer` → 빈 큐 감지 → `drafting_agent` |
-
-두 경로 모두 `article_interviewer`를 거칩니다. `article_interviewer`는 `article_queue`가 `[]`일 때 `current_stage = "article_complete"`를 설정하고, `route_after_article_interview`가 `drafting_agent`로 분기합니다.
-
-**`route_at_start`에 `"article_complete"` 미처리 시 실제 발생 흐름:**
-```
-/articles_batch 제출 (article_queue=[], current_stage="article_complete")
-→ route_at_start("article_complete") — 처리 케이스 없음
-→ intent_analyzer (default fallback)
-→ Gemini가 missing_fields != [] 반환 가능
-→ interviewer → END
-→ draft 미생성 → DraftModal 열리지 않음
-```
-
-**올바른 흐름 (현재 conditions.py):**
-```
-/articles_batch 제출
-→ route_at_start("article_complete") → article_interviewer
-→ 빈 큐 감지 → route_after_article_interview → drafting_agent
-→ draft_full_text 생성 → stage="draft_review" → DraftModal 열림
-```
-
-> **체크리스트**: `/articles_batch`처럼 `article_queue=[]`를 주입하는 엔드포인트를 추가할 때는
-> 반드시 `route_at_start`에 해당 stage 케이스를 추가하고, `article_interviewer`로 라우팅하세요.
 
 ### 5. Firebase 인증 — `signInWithPopup` 사용 금지
 
@@ -643,6 +617,95 @@ useEffect(() => {
 **동작 차이**:
 - `signInWithPopup`: 팝업 창 열림 → COOP 차단 → 인증 실패
 - `signInWithRedirect`: 현재 탭이 Google로 이동 → 인증 → 앱으로 복귀 → `onAuthStateChanged` 자동 처리
+
+### 6. 조항 수집 경로 — 점진적 입력 vs. 일괄 입력
+
+조항을 하나씩 입력하면 DraftModal이 열리는데, ArticleItemsModal로 한 번에 제출하면 모달이 열리지 않는 경우의 원인과 올바른 흐름입니다.
+
+| 경로 | 엔드포인트 | 주입 `current_stage` | 워크플로우 |
+|------|-----------|----------------------|-----------|
+| 점진적 (하나씩) | `/chat` | `"article_interviewing"` (체크포인트 유지) | `article_interviewer` → 큐 소진 → `drafting_agent` |
+| 일괄 (ArticleItemsModal) | `/articles_batch` | `"article_complete"` + `article_queue=[]` | `article_interviewer` → 빈 큐 감지 → `drafting_agent` |
+
+두 경로 모두 `article_interviewer`를 거칩니다. `article_interviewer`는 `article_queue`가 `[]`일 때 `current_stage = "article_complete"`를 설정하고, `route_after_article_interview`가 `drafting_agent`로 분기합니다.
+
+**`route_at_start`에 `"article_complete"` 미처리 시 실제 발생 흐름:**
+```
+/articles_batch 제출 (article_queue=[], current_stage="article_complete")
+→ route_at_start("article_complete") — 처리 케이스 없음
+→ intent_analyzer (default fallback)
+→ Gemini가 missing_fields != [] 반환 가능
+→ interviewer → END
+→ draft 미생성 → DraftModal 열리지 않음
+```
+
+**올바른 흐름 (현재 conditions.py):**
+```
+/articles_batch 제출
+→ route_at_start("article_complete") → article_interviewer
+→ 빈 큐 감지 → route_after_article_interview → drafting_agent
+→ draft_full_text 생성 → stage="draft_review" → DraftModal 열림
+```
+
+> **체크리스트**: `/articles_batch`처럼 `article_queue=[]`를 주입하는 엔드포인트를 추가할 때는
+> 반드시 `route_at_start`에 해당 stage 케이스를 추가하고, `article_interviewer`로 라우팅하세요.
+
+### 7. 기본정보 한 번에 입력 시 — `SessionCreateResponse` 필드 누락
+
+**증상**: 기본정보 4개를 첫 메시지에 한 번에 제공하면 조항 입력 모달·버튼이 안 뜸. 점진적으로 입력하면 정상.
+
+**원인**:
+
+첫 메시지는 `sessionIdRef.current == null` → `createSession(text)` 경로를 사용합니다.
+이때 그래프가 `article_planner`까지 실행되어 `current_article_key`, `article_queue`를 설정하지만,
+`SessionCreateResponse`에 이 필드가 없어 프론트엔드로 전달되지 않습니다.
+
+```
+첫 메시지 → createSession() → POST /api/v1/session
+  → 그래프: intent_analyzer → graph_retriever → article_planner
+  → article_planner: current_article_key="목적", article_queue=[...] 설정
+  → SessionCreateResponse(session_id, message, stage) ← article 필드 없음!
+  → applyResponse()에서 setCurrentArticleKey() 미호출
+  → currentArticleKey = null → mappedArticles = [] → isArticleModalOpen = false
+```
+
+두 번째 이후 메시지는 `sendMessage()` → `/chat` → `ChatResponse` 경유므로 `article_queue`, `current_article_key`가 정상 포함됩니다.
+
+**수정 위치 (세 군데)**:
+1. `app/api/schemas.py` — `SessionCreateResponse`에 `article_queue`, `current_article_key` 추가
+2. `app/api/routers/chat.py` — `create_session` 핸들러에서 `result.get()`으로 해당 값 반환
+3. `frontend/src/types.ts` — `SessionCreateResponse` 인터페이스에 필드 추가
+
+> **원칙**: `SessionCreateResponse`는 `ChatResponse`와 동일한 수준의 그래프 출력 필드를 포함해야 합니다.
+> 새 그래프 노드를 추가하고 첫 메시지에서 도달 가능하다면, 두 응답 스키마를 동시에 업데이트하세요.
+
+### 8. TypeScript `null` vs `undefined` — 백엔드 API 타입 일관성
+
+**증상**: Docker 빌드 시 TypeScript 컴파일 오류:
+
+```
+Type 'string | null | undefined' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+```
+
+**원인**: Python `None` → JSON `null` → TypeScript `null`로 수신됩니다.
+TypeScript 인터페이스나 함수 파라미터를 `T | undefined`로만 정의하면 `null`을 거부합니다.
+
+```typescript
+// ❌ 잘못된 타입 — Python None → JSON null이지만 TypeScript가 거부
+current_article_key?: string           // string | undefined 만 허용
+
+// ✅ 올바른 타입
+current_article_key?: string | null    // string | null | undefined 모두 허용
+```
+
+**수정 위치**:
+- `frontend/src/types.ts` — `null`을 반환할 수 있는 모든 필드에 `| null` 추가
+  (`SessionCreateResponse`, `ChatResponse`, `SessionStateResponse`의 `current_article_key`)
+- `frontend/src/App.tsx` — `applyResponse` 파라미터 타입 동기화
+
+> **체크리스트**: 새 API 필드 추가 시 Python 백엔드에서 `None` 반환 가능 여부를 확인하고,
+> TypeScript 인터페이스와 해당 필드를 사용하는 함수 파라미터 타입에 `| null`을 포함하세요.
 
 ---
 
