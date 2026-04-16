@@ -51,3 +51,11 @@ neo4j_data/
 
 # Firebase service account (민감 정보 — 절대 커밋 금지)
 firebase-service-account.json
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# Artifacts
+=*
