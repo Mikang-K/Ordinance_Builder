@@ -157,7 +157,7 @@ docker cp ordinance_builder-neo4j-1:/tmp/neo4j-dump ./neo4j-dump
 
 ```bash
 # GOOGLE_API_KEY
-echo -n "AIzaSyDfz9LQmOEUJ1Z7iSe_sfcRHBYfsT03NDQ" | \
+echo -n "<google-api-key>" | \
   gcloud secrets create GOOGLE_API_KEY --data-file=-
 
 # ANTHROPIC_API_KEY
