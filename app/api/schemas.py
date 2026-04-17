@@ -43,6 +43,7 @@ class SessionCreateResponse(BaseModel):
     stage: str
     article_queue: Optional[list[str]] = None
     current_article_key: Optional[str] = None
+    similar_ordinances: Optional[list] = None
 
 
 class SimilarOrdinance(BaseModel):

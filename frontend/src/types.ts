@@ -38,6 +38,7 @@ export interface SessionCreateResponse {
   stage: Stage
   article_queue?: string[]
   current_article_key?: string | null
+  similar_ordinances?: SimilarOrdinance[]
 }
 
 export interface ChatResponse {
@@ -77,6 +78,6 @@ export interface SessionStateResponse {
   similar_ordinances?: SimilarOrdinance[]
   legal_issues?: LegalIssue[]
   ordinance_info: Record<string, string>
-  article_queue?: string[]
+  article_queue?: string[] | null
   current_article_key?: string | null
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import type { SimilarOrdinance } from '../types'
 
 interface Props {
   articles: string[]
@@ -7,6 +8,7 @@ interface Props {
   onClose: () => void
   fontSize: number
   onFontSizeChange: (size: number) => void
+  similarOrdinances?: SimilarOrdinance[]
 }
 
 const ARTICLE_GUIDES: Record<string, { title: string; hint: string; example?: string }> = {
@@ -60,6 +62,7 @@ export default function ArticleItemsModal({
   onClose,
   fontSize,
   onFontSizeChange,
+  similarOrdinances = [],
 }: Props) {
   // values: null means "AI default". string means "User Input". undefined means "not evaluated yet".
   const [values, setValues] = useState<Record<string, string | null>>({})
@@ -249,11 +252,34 @@ export default function ArticleItemsModal({
                   )
                 })}
               </ul>
+              {similarOrdinances.length > 0 && (
+                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+                  <h3 style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>유사 조례</h3>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {similarOrdinances.slice(0, 3).map((o) => (
+                      <li key={o.ordinance_id} style={{ fontSize: '0.82rem', color: '#475569' }}>
+                        <div style={{ fontWeight: 600, color: '#334155', marginBottom: '2px' }}>{o.region_name}</div>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                          <span style={{ flex: 1, lineHeight: '1.4' }}>{o.title}</span>
+                          <a
+                            href={`https://www.law.go.kr/ordinSc.do?query=${encodeURIComponent(o.title)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: '0.75rem', color: '#2563eb', whiteSpace: 'nowrap', textDecoration: 'none', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1px 6px', background: '#eff6ff', flexShrink: 0, marginTop: '1px' }}
+                          >
+                            원문 ↗
+                          </a>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-            
+
             {/* Guide Panel */}
             {guide && (
-              <div style={{ padding: '20px 16px', background: '#fffbeb', borderTop: '1px solid #fde68a' }}>
+              <div style={{ padding: '20px 16px', background: '#fffbeb', borderTop: '1px solid #fde68a', overflowY: 'auto', maxHeight: '280px' }}>
                 <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#b45309', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span>💡</span> 작성 가이드
                 </h4>
@@ -263,6 +289,31 @@ export default function ArticleItemsModal({
                 {guide.example && (
                   <div style={{ marginTop: '10px', fontSize: '0.8rem', color: '#047857', background: '#ecfdf5', padding: '8px 10px', borderRadius: '6px' }}>
                     {guide.example}
+                  </div>
+                )}
+                {similarOrdinances.length > 0 && (
+                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #fde68a' }}>
+                    <h4 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#b45309', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span>📋</span> 유사 조례 참고
+                    </h4>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {similarOrdinances.slice(0, 3).map((o) => (
+                        <li key={o.ordinance_id} style={{ fontSize: '0.8rem', color: '#92400e' }}>
+                          <div style={{ fontWeight: 600, marginBottom: '2px' }}>{o.region_name}</div>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                            <span style={{ flex: 1, lineHeight: '1.4' }}>{o.title}</span>
+                            <a
+                              href={`https://www.law.go.kr/ordinSc.do?query=${encodeURIComponent(o.title)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ fontSize: '0.73rem', color: '#b45309', whiteSpace: 'nowrap', textDecoration: 'none', border: '1px solid #fbbf24', borderRadius: '4px', padding: '1px 6px', background: '#fef3c7', flexShrink: 0, marginTop: '1px' }}
+                            >
+                              원문 ↗
+                            </a>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
               </div>

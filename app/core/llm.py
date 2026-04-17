@@ -38,7 +38,7 @@ def get_llm(provider: str | None = None) -> BaseChatModel:
             )
         elif key == "anthropic":
             _llm_cache[key] = ChatAnthropic(
-                model="claude-opus-4-6",
+                model="claude-opus-4-7",
                 api_key=settings.ANTHROPIC_API_KEY,
                 temperature=0.2,
                 max_tokens=8192,

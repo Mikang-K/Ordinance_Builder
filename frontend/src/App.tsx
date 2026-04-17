@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { ChatMessage, LegalIssue, SimilarOrdinance, Stage } from './types'
 import { createSession, sendMessage, finalizeSession, getSessionState, submitArticlesBatch } from './api'
-import { auth, loginWithGoogle, logout, onAuthStateChanged, getRedirectResult } from './firebase'
+import { auth, loginWithGoogle, logout, onAuthStateChanged } from './firebase'
 import type { User } from './firebase'
 import StageIndicator from './components/StageIndicator'
 import ChatWindow from './components/ChatWindow'
@@ -10,6 +10,7 @@ import LegalIssuesPanel from './components/LegalIssuesPanel'
 import SimilarOrdinancesPanel from './components/SimilarOrdinancesPanel'
 import SessionListScreen from './components/SessionListScreen'
 import ArticleItemsModal from './components/ArticleItemsModal'
+import LoadingModal from './components/LoadingModal'
 
 export default function App() {
   // ── 인증 상태 ──────────────────────────────────────────────────────────────
@@ -17,9 +18,6 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
-    // signInWithRedirect 후 돌아왔을 때 pending 결과 처리 (에러만 로깅)
-    getRedirectResult(auth).catch((e) => console.error('redirect auth error:', e))
-
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser)
       setAuthLoading(false)
@@ -46,6 +44,7 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState<string | null>(null)
   const [stage, setStage] = useState<Stage | null>(null)
 
   // Draft modal state
@@ -134,6 +133,7 @@ export default function App() {
     setError(null)
     appendMessage({ role: 'user', text })
     setIsLoading(true)
+    setLoadingMessage(sessionIdRef.current ? 'AI가 응답을 준비 중입니다...' : '기본 정보를 분석하고 있습니다...')
 
     try {
       if (!sessionIdRef.current) {
@@ -148,6 +148,7 @@ export default function App() {
       setError(e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.')
     } finally {
       setIsLoading(false)
+      setLoadingMessage(null)
     }
   }
 
@@ -157,6 +158,7 @@ export default function App() {
     setError(null)
     appendMessage({ role: 'user', text: '법률 검증을 요청합니다.' })
     setIsLoading(true)
+    setLoadingMessage('법률 조항을 검증하고 있습니다...')
 
     try {
       const res = await sendMessage(sessionIdRef.current, '법률 검증을 요청합니다.', editedDraft)
@@ -165,6 +167,7 @@ export default function App() {
       setError(e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.')
     } finally {
       setIsLoading(false)
+      setLoadingMessage(null)
     }
   }
 
@@ -173,6 +176,7 @@ export default function App() {
 
     setError(null)
     setIsLoading(true)
+    setLoadingMessage('조례 초안을 확정하는 중입니다...')
 
     try {
       const res = await finalizeSession(sessionIdRef.current, finalDraft)
@@ -186,6 +190,7 @@ export default function App() {
       setError(e instanceof Error ? e.message : '확정 중 오류가 발생했습니다.')
     } finally {
       setIsLoading(false)
+      setLoadingMessage(null)
     }
   }
 
@@ -237,7 +242,7 @@ export default function App() {
       if (state.similar_ordinances && state.similar_ordinances.length > 0) {
         setSimilarOrdinances(state.similar_ordinances)
       }
-      if (state.article_queue !== undefined) setArticleQueue(state.article_queue)
+      if (state.article_queue != null) setArticleQueue(state.article_queue)
       if (state.current_article_key !== undefined) setCurrentArticleKey(state.current_article_key)
 
       if (state.stage === 'completed') {
@@ -264,6 +269,7 @@ export default function App() {
     if (!sessionIdRef.current || isLoading) return
     setError(null)
     setIsLoading(true)
+    setLoadingMessage('조례 초안을 생성하고 있습니다...')
     try {
       const res = await submitArticlesBatch(sessionIdRef.current, articles)
       applyResponse(res)
@@ -271,6 +277,7 @@ export default function App() {
       setError(e instanceof Error ? e.message : '항목 전송에 실패했습니다.')
     } finally {
       setIsLoading(false)
+      setLoadingMessage(null)
     }
   }
 
@@ -471,8 +478,11 @@ export default function App() {
           onClose={() => setHideArticleModal(true)}
           fontSize={fontSize}
           onFontSizeChange={setFontSize}
+          similarOrdinances={similarOrdinances}
         />
       )}
+
+      {isLoading && loadingMessage && <LoadingModal message={loadingMessage} />}
     </div>
   )
 }

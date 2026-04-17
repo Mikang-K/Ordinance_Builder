@@ -34,7 +34,17 @@ export default function SimilarOrdinancesPanel({ ordinances }: Props) {
                   </span>
                 )}
               </div>
-              <p className="similar-title">{o.title}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <p className="similar-title" style={{ margin: 0, flex: 1 }}>{o.title}</p>
+                <a
+                  href={`https://www.law.go.kr/ordinSc.do?query=${encodeURIComponent(o.title)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: '0.78rem', color: '#2563eb', whiteSpace: 'nowrap', textDecoration: 'none', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '2px 7px', background: '#eff6ff', flexShrink: 0 }}
+                >
+                  원문 보기 ↗
+                </a>
+              </div>
               {o.relevance_reason && (
                 <p className="similar-reason">{o.relevance_reason}</p>
               )}

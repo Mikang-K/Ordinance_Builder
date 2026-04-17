@@ -33,6 +33,11 @@ htmlcov/
 .vscode/
 .idea/
 
+# Claude Code (로컬 도구 전용)
+.agents/
+.claude/
+skills-lock.json
+
 # OS
 .DS_Store
 Thumbs.db

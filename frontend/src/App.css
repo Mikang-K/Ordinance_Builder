@@ -697,6 +697,101 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   .stage-dot { width: 18px; height: 18px; font-size: 0.55rem; }
 }
 
+/* ─── Loading Modal ─── */
+.loading-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+
+.loading-modal-card {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 40px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.2);
+  animation: loadingModalIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  min-width: 280px;
+}
+
+@keyframes loadingModalIn {
+  from { transform: scale(0.85); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+.loading-spinner-wrapper {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 3px solid transparent;
+}
+
+.loading-ring-outer {
+  width: 72px;
+  height: 72px;
+  border-top-color: #1e40af;
+  border-right-color: #1e40af;
+  animation: spinCw 1.8s linear infinite;
+}
+
+.loading-ring-inner {
+  width: 52px;
+  height: 52px;
+  border-bottom-color: #93c5fd;
+  border-left-color: #93c5fd;
+  animation: spinCcw 1.2s linear infinite;
+}
+
+@keyframes spinCw {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spinCcw {
+  to { transform: rotate(-360deg); }
+}
+
+.loading-icon {
+  font-size: 1.4rem;
+  animation: floatUpDown 2s ease-in-out infinite;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes floatUpDown {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-5px); }
+}
+
+.loading-modal-message {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1e293b;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.loading-modal-sub {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  text-align: center;
+}
+
 /* ─── Session List Screen ─── */
 .session-list-screen {
   min-height: 100vh;

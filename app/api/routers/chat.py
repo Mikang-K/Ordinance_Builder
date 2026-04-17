@@ -67,7 +67,7 @@ _DRAFT_VISIBLE_STAGES = {"draft_review", "legal_review_requested", "legal_checki
 _LEGAL_VISIBLE_STAGES = {"legal_checking", "completed"}
 
 # Stages where similar ordinances should be returned to the caller
-_SIMILAR_VISIBLE_STAGES = {"retrieving", "drafting", "draft_review",
+_SIMILAR_VISIBLE_STAGES = {"retrieving", "article_interviewing", "drafting", "draft_review",
                             "legal_checking", "completed"}
 
 # Default initial state (injected on session creation)
@@ -151,6 +151,8 @@ async def get_session_state(
         ),
         legal_issues=values.get("legal_issues") if stage in _LEGAL_VISIBLE_STAGES else None,
         ordinance_info=values.get("ordinance_info", {}),
+        article_queue=values.get("article_queue"),
+        current_article_key=values.get("current_article_key"),
     )
 
 
@@ -210,6 +212,9 @@ async def create_session(
             stage=stage,
             article_queue=result.get("article_queue"),
             current_article_key=result.get("current_article_key"),
+            similar_ordinances=(
+                result.get("similar_ordinances") if stage in _SIMILAR_VISIBLE_STAGES else None
+            ),
         )
 
     await db_create_session(
