@@ -870,5 +870,105 @@ API 호출 중 화면 중앙에 오버레이 모달을 표시합니다.
 | **ETL** | 국가법령정보센터 Open API + 자체 파이프라인 | 법령·조례 데이터 수집 |
 | **배포** | Docker Compose (로컬) / Cloud Functions + AuraDB (예정) | 컨테이너 기반 배포 |
 
+---
+
+## 배포 시 주의사항
+
+### 12. AuraDB 배포 — Provision 임베딩 제외 필수
+
+**배경**: 로컬 Neo4j 덤프가 15GB에 달해 AuraDB Professional 기본 플랜(8GB) 초과.
+
+**원인 분석**:
+- Provision 노드 316,943개 × 3072차원 임베딩 × 8B ≈ **7.8GB** (전체의 90%)
+- Ordinance 노드 20,888개 × 3072차원 × 8B ≈ 0.5GB
+
+**해결**: ETL 파이프라인 실행 시 `SKIP_PROVISION_EMBEDDING=true` 환경변수로 Phase 5를 건너뜀.
+
+```bash
+# AuraDB 대상 ETL 실행 명령 (반드시 이 플래그 포함)
+NEO4J_URI="neo4j+s://da425acb.databases.neo4j.io" \
+NEO4J_PASSWORD="<auradb-password>" \
+SKIP_PROVISION_EMBEDDING=true \
+python -m pipeline.scripts.initial_load
+```
+
+**영향 범위**: `find_legal_basis()`의 **4순위 fallback**(Provision 벡터 검색)만 비활성화.
+1~3순위(DELEGATES 탐색 → BASED_ON 탐색 → 키워드 검색)는 정상 동작.
+`try/except`로 감싸져 있어 앱 오류 없이 빈 결과 반환.
+
+**수정 파일**: `pipeline/scripts/initial_load.py` — `SKIP_PROVISION_EMBEDDING` 환경변수 분기 추가 (2026-04-17)
+
+---
+
+### 13. GCP 프로젝트 ID
+
+Firebase 프로젝트 ID(`ordinance-builder`)와 실제 GCP 프로젝트 ID가 다름.
+
+| 항목 | 값 |
+|------|---|
+| Firebase 프로젝트 ID | `ordinance-builder` |
+| **실제 GCP 프로젝트 ID** | **`ordinance-builder-b9f6c`** |
+| AuraDB URI | `neo4j+s://da425acb.databases.neo4j.io` |
+
+gcloud 명령 실행 시 반드시 `ordinance-builder-b9f6c` 사용:
+```bash
+gcloud config set project ordinance-builder-b9f6c
+```
+
+---
+
+### 14. `CORS_ORIGINS` 환경변수 파싱 오류 — Cloud Run 배포 시
+
+**증상**: Cloud Run 컨테이너 시작 실패 → 503:
+
+```
+pydantic_settings.exceptions.SettingsError: error parsing value for field "CORS_ORIGINS" from source "EnvSettingsSource"
+```
+
+**원인**: pydantic-settings v2는 `list[str]` 필드에 JSON 배열 형식(`["url"]`)을 요구하는데,
+Cloud Run `--set-env-vars`로 `CORS_ORIGINS=https://...` (plain string)을 주입하면 파싱 실패.
+
+**근본 원인**: pydantic-settings v2의 `EnvSettingsSource.decode_complex_value`가 `list[str]` 필드에 대해 `field_validator` 실행 전에 `json.loads(value)`를 먼저 호출함.
+환경변수 값이 빈 문자열(`""`)이면 `json.loads("")` → `JSONDecodeError` 발생.
+
+**최종 수정** (`app/core/config.py` + `app/main.py`):
+- `CORS_ORIGINS` 타입을 `list[str]` → `str`으로 변경해 pydantic-settings의 JSON 디코딩 우회
+- 파싱은 `main.py`에서 직접 처리:
+
+```python
+# config.py
+CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+
+# main.py
+_cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, ...)
+```
+
+Cloud Run 환경변수 설정:
+```
+CORS_ORIGINS=https://ordinance-builder-b9f6c.web.app
+```
+
+**수정 파일**: `app/core/config.py`, `app/main.py` (2026-04-18)
+
+---
+
+## 테스트 환경
+
+**모든 테스트는 배포 환경(Firebase Hosting + Cloud Run)에서 진행한다.**
+
+- Docker Compose 로컬 환경이 아닌, `https://ordinance-builder-b9f6c.web.app` 기준으로 검증
+- 오류 확인: GCP 콘솔 → Cloud Run → `ordinance-backend` → 로그 탭
+- 빠른 로그 조회:
+  ```bash
+  gcloud logging read \
+    'resource.type="cloud_run_revision" severity>=ERROR' \
+    --project=ordinance-builder-b9f6c \
+    --limit=20
+  ```
+- 코드 수정 후 반드시 Cloud Build + `gcloud run deploy`로 재배포 후 테스트
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.

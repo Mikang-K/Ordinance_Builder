@@ -1,0 +1,16 @@
+﻿.gitignore
+*.dump
+*.zip
+*.tar.gz
+frontend/
+pipeline/
+.git/
+__pycache__/
+.pytest_cache/
+node_modules/
+.env
+.env.*
+!.env.example
+docker-compose.yml
+firebase-service-account.json
+neo4j.dump

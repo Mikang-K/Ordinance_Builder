@@ -1,7 +1,7 @@
 # GCP 인프라 배포 계획
 
 > 작성일: 2026-04-17  
-> Firebase 프로젝트 `ordinance-builder` 이미 생성됨 → GCP 프로젝트 연결부터 시작
+> Firebase 프로젝트 `ordinance-builder-b9f6c` 이미 생성됨 → GCP 프로젝트 연결부터 시작
 
 ---
 
@@ -9,11 +9,11 @@
 
 | 항목 | 상태 | 비고 |
 |------|------|------|
-| Firebase 프로젝트 | ✅ 완료 | `ordinance-builder` |
+| Firebase 프로젝트 | ✅ 완료 | `ordinance-builder-b9f6c` |
 | Firebase Web App 설정 | ✅ 완료 | `VITE_FIREBASE_*` 값 확보됨 |
 | Google 로그인 활성화 | ❓ 확인 필요 | Firebase 콘솔 → Authentication |
-| GCP 프로젝트 연결 | ❌ 미완료 | Firebase 프로젝트에 GCP 연결 필요 |
-| Cloud SQL | ❌ 미완료 | |
+| GCP 프로젝트 연결 | ✅ 완료 | `ordinance-builder-b9f6c` |
+| Cloud SQL | ✅ 완료 | `ordinance-db` (asia-northeast3) |
 | Neo4j AuraDB | ❌ 미완료 | 현재 로컬 Docker 사용 중 |
 | Secret Manager | ❌ 미완료 | |
 | Cloud Run | ❌ 미완료 | |
@@ -32,7 +32,7 @@ gcloud auth application-default login
 
 # Firebase 프로젝트와 연결된 GCP 프로젝트 ID 확인 후 설정
 # (Firebase 콘솔 → 프로젝트 설정 → 일반 → '프로젝트 ID' 확인)
-gcloud config set project ordinance-builder
+gcloud config set project ordinance-builder-b9f6c
 
 # 현재 설정 확인
 gcloud config list
@@ -100,7 +100,7 @@ gcloud sql instances describe ordinance-db \
 # Connection name 확인 (Cloud Run --add-cloudsql-instances 파라미터)
 gcloud sql instances describe ordinance-db \
   --format="value(connectionName)"
-# 예: ordinance-builder:asia-northeast3:ordinance-db
+# 예: ordinance-builder-b9f6c:asia-northeast3:ordinance-db
 ```
 
 ### 1-4. Serverless VPC Access 커넥터 생성
@@ -111,7 +111,7 @@ Cloud Run → Cloud SQL Private IP 접속을 위해 필요합니다.
 gcloud compute networks vpc-access connectors create ordinance-connector \
   --region=asia-northeast3 \
   --subnet=default \
-  --subnet-project=ordinance-builder \
+  --subnet-project=ordinance-builder-b9f6c \
   --min-instances=2 \
   --max-instances=10
 ```
@@ -197,15 +197,15 @@ echo -n "qorwlsaud1" | \
 gcloud iam service-accounts create ordinance-backend-sa \
   --display-name="Ordinance Builder Backend"
 
-SA_EMAIL="ordinance-backend-sa@ordinance-builder.iam.gserviceaccount.com"
+SA_EMAIL="ordinance-backend-sa@ordinance-builder-b9f6c.iam.gserviceaccount.com"
 
 # Secret Manager 접근 권한
-gcloud projects add-iam-policy-binding ordinance-builder \
+gcloud projects add-iam-policy-binding ordinance-builder-b9f6c \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/secretmanager.secretAccessor"
 
 # Cloud SQL 접속 권한
-gcloud projects add-iam-policy-binding ordinance-builder \
+gcloud projects add-iam-policy-binding ordinance-builder-b9f6c \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/cloudsql.client"
 ```
@@ -216,10 +216,10 @@ gcloud projects add-iam-policy-binding ordinance-builder \
 
 Firebase 프로젝트가 이미 생성되어 있으므로 인증 설정만 확인합니다.
 
-1. [Firebase 콘솔](https://console.firebase.google.com/project/ordinance-builder) 접속
+1. [Firebase 콘솔](https://console.firebase.google.com/project/ordinance-builder-b9f6c) 접속
 2. **Authentication** → **Sign-in method** → **Google** 활성화 확인
 3. **Authentication** → **Settings** → **승인된 도메인** 확인
-   - Firebase Hosting 배포 후 `ordinance-builder.web.app` 자동 추가됨
+   - Firebase Hosting 배포 후 `ordinance-builder-b9f6c.web.app` 자동 추가됨
    - 커스텀 도메인 사용 시 수동 추가 필요
 
 ### 백엔드용 Firebase 서비스 계정 (Cloud Run ADC)
@@ -229,7 +229,7 @@ Cloud Run에서는 `FIREBASE_CREDENTIALS_PATH` 없이 **Application Default Cred
 
 ```bash
 # Firebase Admin SDK 사용을 위한 IAM 역할 추가
-gcloud projects add-iam-policy-binding ordinance-builder \
+gcloud projects add-iam-policy-binding ordinance-builder-b9f6c \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/firebase.sdkAdminServiceAgent"
 ```
@@ -255,7 +255,7 @@ gcloud artifacts repositories create ordinance-backend \
 # Docker 인증 설정
 gcloud auth configure-docker asia-northeast3-docker.pkg.dev
 
-IMAGE="asia-northeast3-docker.pkg.dev/ordinance-builder/ordinance-backend/app"
+IMAGE="asia-northeast3-docker.pkg.dev/ordinance-builder-b9f6c/ordinance-backend/app"
 
 # Cloud Build로 빌드 (로컬 Docker 없이도 가능)
 gcloud builds submit \
@@ -266,8 +266,8 @@ gcloud builds submit \
 ### 5-3. Cloud Run 배포
 
 ```bash
-CONN_NAME="ordinance-builder:asia-northeast3:ordinance-db"
-IMAGE="asia-northeast3-docker.pkg.dev/ordinance-builder/ordinance-backend/app:latest"
+CONN_NAME="ordinance-builder-b9f6c:asia-northeast3:ordinance-db"
+IMAGE="asia-northeast3-docker.pkg.dev/ordinance-builder-b9f6c/ordinance-backend/app:latest"
 
 gcloud run deploy ordinance-backend \
   --image="${IMAGE}" \
@@ -297,7 +297,7 @@ NEO4J_PASSWORD=NEO4J_PASSWORD:latest,\
 POSTGRES_URL=POSTGRES_URL:latest" \
   \
   --set-env-vars="\
-CORS_ORIGINS=https://ordinance-builder.web.app,\
+CORS_ORIGINS=https://ordinance-builder-b9f6c.web.app,\
 LLM_INTENT=gemini,\
 LLM_DRAFTING=anthropic,\
 LLM_REVIEWER=anthropic,\
@@ -337,8 +337,8 @@ cd frontend
 # .env.production 작성
 cat > .env.production << 'EOF'
 VITE_FIREBASE_API_KEY=AIzaSyDnC6_YhjV8Ff4tgH6LEdIHEwLYLm2dVQs
-VITE_FIREBASE_AUTH_DOMAIN=ordinance-builder.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=ordinance-builder
+VITE_FIREBASE_AUTH_DOMAIN=ordinance-builder-b9f6c.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=ordinance-builder-b9f6c
 EOF
 
 # 프로덕션 빌드
@@ -354,7 +354,7 @@ firebase init hosting
 ```
 
 프롬프트 응답:
-- **Project**: `ordinance-builder` 선택
+- **Project**: `ordinance-builder-b9f6c` 선택
 - **Public directory**: `frontend/dist`
 - **Single-page app**: `Yes`
 - **GitHub auto-deploy**: `No`
@@ -391,10 +391,10 @@ firebase init hosting
 ### 6-5. 배포
 
 ```bash
-firebase deploy --only hosting --project ordinance-builder
+firebase deploy --only hosting --project ordinance-builder-b9f6c
 ```
 
-배포 완료 후 URL: `https://ordinance-builder.web.app`
+배포 완료 후 URL: `https://ordinance-builder-b9f6c.web.app`
 
 ---
 
@@ -421,7 +421,7 @@ Cloud Run 배포 + Firebase Hosting URL 확정 후 CORS 설정을 업데이트�
 ```bash
 gcloud run services update ordinance-backend \
   --region=asia-northeast3 \
-  --update-env-vars="CORS_ORIGINS=https://ordinance-builder.web.app"
+  --update-env-vars="CORS_ORIGINS=https://ordinance-builder-b9f6c.web.app"
 ```
 
 ---
@@ -429,7 +429,7 @@ gcloud run services update ordinance-backend \
 ## 배포 후 검증 체크리스트
 
 ```bash
-HOSTING_URL="https://ordinance-builder.web.app"
+HOSTING_URL="https://ordinance-builder-b9f6c.web.app"
 
 # 1. 백엔드 헬스 체크
 curl "${BACKEND_URL}/docs"  # FastAPI Swagger UI 응답 확인
@@ -442,7 +442,7 @@ curl "${HOSTING_URL}/api/v1/sessions" \
 # 3. Cloud SQL 연결 확인 (백엔드 로그)
 gcloud logging read \
   'resource.type="cloud_run_revision" AND textPayload:"sessions table"' \
-  --project=ordinance-builder \
+  --project=ordinance-builder-b9f6c \
   --limit=10
 
 # 4. 세션 격리 확인

@@ -155,8 +155,12 @@ def run() -> None:
         loader.build_conflicts_with_relationships()       # OWL: 상충하다 (last — depends on all above)
 
         # ── 5. Bulk-embed all Provision nodes ─────────────────────────
-        logger.info("=== Phase 5: embedding provisions ===")
-        _embed_all_provisions(loader)
+        import os
+        if os.getenv("SKIP_PROVISION_EMBEDDING", "").lower() in ("1", "true", "yes"):
+            logger.info("=== Phase 5: skipped (SKIP_PROVISION_EMBEDDING=true) ===")
+        else:
+            logger.info("=== Phase 5: embedding provisions ===")
+            _embed_all_provisions(loader)
 
     elapsed = time.time() - start
     logger.info(

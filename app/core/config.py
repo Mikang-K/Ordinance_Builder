@@ -31,11 +31,10 @@ class Settings(BaseSettings):
     # Firebase — 로컬 개발 시 서비스 계정 JSON 경로 지정 (Cloud Run은 ADC 자동 사용)
     FIREBASE_CREDENTIALS_PATH: str = ""
 
-    # CORS — comma-separated origins, or JSON array string
-    CORS_ORIGINS: list[str] = [
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:3000",  # Docker (nginx)
-    ]
+    # CORS — str 타입으로 유지해 pydantic-settings의 JSON 디코딩 우회
+    # 쉼표 구분 문자열로 주입: "https://example.com,https://other.com"
+    # 파싱은 main.py의 cors_origins() 헬퍼에서 처리
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
     class Config:
         env_file = ".env"
