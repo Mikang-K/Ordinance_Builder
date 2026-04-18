@@ -951,6 +951,20 @@ CORS_ORIGINS=https://ordinance-builder-b9f6c.web.app
 
 **수정 파일**: `app/core/config.py`, `app/main.py` (2026-04-18)
 
+### 15. Claude 4.x — `temperature` 파라미터 deprecated
+
+**증상**: `drafting_agent` / `draft_reviewer` 실행 시 500 오류:
+
+```
+anthropic.BadRequestError: 400 - `temperature` is deprecated for this model.
+```
+
+**원인**: `claude-opus-4-7` 이상 Claude 4.x 모델은 `temperature` 파라미터를 허용하지 않음.
+
+**수정** (`app/core/llm.py`): `ChatAnthropic` 생성자에서 `temperature=0.2` 제거.
+
+**수정 파일**: `app/core/llm.py` (2026-04-18)
+
 ---
 
 ## 테스트 환경
