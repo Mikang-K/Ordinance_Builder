@@ -6,11 +6,11 @@ import type { User } from './firebase'
 import StageIndicator from './components/StageIndicator'
 import ChatWindow from './components/ChatWindow'
 import DraftModal from './components/DraftModal'
-import LegalIssuesPanel from './components/LegalIssuesPanel'
 import SimilarOrdinancesPanel from './components/SimilarOrdinancesPanel'
 import SessionListScreen from './components/SessionListScreen'
 import ArticleItemsModal from './components/ArticleItemsModal'
 import LoadingModal from './components/LoadingModal'
+import CompletedDraftModal from './components/CompletedDraftModal'
 
 export default function App() {
   // ── 인증 상태 ──────────────────────────────────────────────────────────────
@@ -56,13 +56,12 @@ export default function App() {
   // Finalized result state
   const [completedDraft, setCompletedDraft] = useState<string | null>(null)
   const [finalLegalIssues, setFinalLegalIssues] = useState<LegalIssue[] | null>(null)
+  const [isCompletedDraftModalOpen, setIsCompletedDraftModalOpen] = useState(false)
 
   // Similar ordinances (shown after retrieving stage)
   const [similarOrdinances, setSimilarOrdinances] = useState<SimilarOrdinance[]>([])
 
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'chat' | 'result'>('chat')
-
   // Article Modal State
   const [articleQueue, setArticleQueue] = useState<string[]>([])
   const [currentArticleKey, setCurrentArticleKey] = useState<string | null>(null)
@@ -120,8 +119,8 @@ export default function App() {
     if (res.is_complete) {
       if (res.draft) setCompletedDraft(res.draft)
       if (res.legal_issues) setFinalLegalIssues(res.legal_issues)
-      setActiveTab('result')
       setIsDraftModalOpen(false)
+      setIsCompletedDraftModalOpen(true)
     }
   }
 
@@ -185,7 +184,7 @@ export default function App() {
       setIsDraftModalOpen(false)
       setStage('completed')
       appendMessage({ role: 'ai', text: '조례 초안이 확정되었습니다.' })
-      setActiveTab('result')
+      setIsCompletedDraftModalOpen(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : '확정 중 오류가 발생했습니다.')
     } finally {
@@ -211,13 +210,13 @@ export default function App() {
     setIsLegallyValid(null)
     setCompletedDraft(null)
     setFinalLegalIssues(null)
+    setIsCompletedDraftModalOpen(false)
     setSimilarOrdinances([])
     setArticleQueue([])
     setCurrentArticleKey(null)
     setHideArticleModal(false)
     setError(null)
     setInput('')
-    setActiveTab('chat')
   }
 
   const handleReset = () => {
@@ -250,7 +249,7 @@ export default function App() {
         if (state.legal_issues && state.legal_issues.length > 0) {
           setFinalLegalIssues(state.legal_issues)
         }
-        setActiveTab('result')
+        setIsCompletedDraftModalOpen(true)
       } else if (state.draft) {
         setPendingDraft(state.draft)
         if (state.legal_issues) setPendingLegalIssues(state.legal_issues)
@@ -280,8 +279,6 @@ export default function App() {
       setLoadingMessage(null)
     }
   }
-
-  const hasResult = !!(completedDraft || finalLegalIssues)
 
   const mappedArticles = currentArticleKey ? [currentArticleKey, ...articleQueue] : []
   const isArticleModalOpen = stage === 'article_interviewing' && mappedArticles.length > 0
@@ -357,6 +354,11 @@ export default function App() {
               초안 편집 · 검증
             </button>
           )}
+          {completedDraft && !isCompletedDraftModalOpen && (
+            <button className="open-draft-btn" style={{ background: '#16a34a' }} onClick={() => setIsCompletedDraftModalOpen(true)}>
+              확정 초안 보기
+            </button>
+          )}
           <button className="reset-btn" onClick={handleReset}>목록</button>
           <div style={userInfoStyle}>
             {user.photoURL && (
@@ -373,24 +375,7 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        {hasResult && (
-          <div className="mobile-tabs">
-            <button
-              className={`mobile-tab ${activeTab === 'chat' ? 'active' : ''}`}
-              onClick={() => setActiveTab('chat')}
-            >
-              💬 채팅
-            </button>
-            <button
-              className={`mobile-tab ${activeTab === 'result' ? 'active' : ''}`}
-              onClick={() => setActiveTab('result')}
-            >
-              📄 확정 초안
-            </button>
-          </div>
-        )}
-
-        <div className={`chat-area ${hasResult && activeTab !== 'chat' ? 'mobile-hidden' : ''}`}>
+        <div className="chat-area">
           <ChatWindow messages={messages} isLoading={isLoading} />
 
           {similarOrdinances.length > 0 && (
@@ -437,25 +422,6 @@ export default function App() {
           )}
         </div>
 
-        {hasResult && (
-          <div className={`result-area ${activeTab !== 'result' ? 'mobile-hidden' : ''}`}>
-            {completedDraft && (
-              <div className="draft-panel">
-                <div className="panel-header">
-                  <h3>확정 조례 초안</h3>
-                  <button
-                    className="copy-btn"
-                    onClick={() => navigator.clipboard.writeText(completedDraft)}
-                  >
-                    복사
-                  </button>
-                </div>
-                <pre className="draft-text">{completedDraft}</pre>
-              </div>
-            )}
-            {finalLegalIssues && <LegalIssuesPanel issues={finalLegalIssues} />}
-          </div>
-        )}
       </main>
 
       {isDraftModalOpen && pendingDraft && (
@@ -479,6 +445,14 @@ export default function App() {
           fontSize={fontSize}
           onFontSizeChange={setFontSize}
           similarOrdinances={similarOrdinances}
+        />
+      )}
+
+      {isCompletedDraftModalOpen && completedDraft && (
+        <CompletedDraftModal
+          draft={completedDraft}
+          legalIssues={finalLegalIssues}
+          onClose={() => setIsCompletedDraftModalOpen(false)}
         />
       )}
 
