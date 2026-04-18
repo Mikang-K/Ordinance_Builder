@@ -291,31 +291,6 @@ export default function ArticleItemsModal({
                     {guide.example}
                   </div>
                 )}
-                {similarOrdinances.length > 0 && (
-                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #fde68a' }}>
-                    <h4 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#b45309', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span>📋</span> 유사 조례 참고
-                    </h4>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {similarOrdinances.slice(0, 3).map((o) => (
-                        <li key={o.ordinance_id} style={{ fontSize: '0.8rem', color: '#92400e' }}>
-                          <div style={{ fontWeight: 600, marginBottom: '2px' }}>{o.region_name}</div>
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
-                            <span style={{ flex: 1, lineHeight: '1.4' }}>{o.title}</span>
-                            <a
-                              href={`https://www.law.go.kr/ordinSc.do?query=${encodeURIComponent(o.title)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ fontSize: '0.73rem', color: '#b45309', whiteSpace: 'nowrap', textDecoration: 'none', border: '1px solid #fbbf24', borderRadius: '4px', padding: '1px 6px', background: '#fef3c7', flexShrink: 0, marginTop: '1px' }}
-                            >
-                              원문 ↗
-                            </a>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
               </div>
             )}
           </div>
