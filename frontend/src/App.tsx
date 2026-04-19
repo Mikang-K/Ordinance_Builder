@@ -71,6 +71,7 @@ export default function App() {
   const [isQAPanelOpen, setIsQAPanelOpen] = useState(false)
   const [qaHistory, setQaHistory] = useState<QAMessage[]>([])
   const [pendingQAContent, setPendingQAContent] = useState<string | null>(null)
+  const [hasSession, setHasSession] = useState(false)
 
   const sessionIdRef = useRef<string | null>(null)
   const [fontSize, setFontSize] = useState<number>(16)
@@ -143,6 +144,7 @@ export default function App() {
       if (!sessionIdRef.current) {
         const res = await createSession(text)
         sessionIdRef.current = res.session_id
+        setHasSession(true)
         applyResponse({ ...res, is_complete: false })
       } else {
         const res = await sendMessage(sessionIdRef.current, text)
@@ -207,6 +209,7 @@ export default function App() {
 
   const resetState = () => {
     sessionIdRef.current = null
+    setHasSession(false)
     setMessages([])
     setStage(null)
     setPendingDraft(null)
@@ -243,6 +246,7 @@ export default function App() {
       const state = await getSessionState(sessionId)
       resetState()
       sessionIdRef.current = state.session_id
+      setHasSession(true)
       setMessages(state.messages)
       setStage(state.stage as Stage)
 
@@ -419,7 +423,7 @@ export default function App() {
                 rows={2}
                 disabled={isLoading || isArticleModalOpen}
               />
-              {sessionIdRef.current && (
+              {hasSession && (
                 <button
                   onClick={() => setIsQAPanelOpen(true)}
                   title="법령 Q&A 패널 열기"

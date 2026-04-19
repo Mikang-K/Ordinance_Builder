@@ -1028,5 +1028,41 @@ QAPanel에서 "현재 조항에 적용하기" 클릭
 
 ---
 
+### 17. `useRef`를 JSX 조건으로 사용하면 버튼이 표시되지 않음
+
+**증상**: 세션이 존재함에도 "🔍 질문" 버튼이 화면에 나타나지 않음.
+
+**원인**: `sessionIdRef`는 `useRef`라서 `.current` 값이 바뀌어도 React 리렌더링을 트리거하지 않음.
+따라서 `{sessionIdRef.current && <button>}` 조건이 세션 생성 후에도 초기값 `null`로 평가됨.
+
+**수정** (`frontend/src/App.tsx`):
+
+```typescript
+// ❌ useRef는 변경 시 리렌더링 없음 → 버튼 미표시
+{sessionIdRef.current && <button>🔍 질문</button>}
+
+// ✅ useState로 별도 관리
+const [hasSession, setHasSession] = useState(false)
+
+// ref 설정과 동시에 state도 업데이트
+sessionIdRef.current = res.session_id
+setHasSession(true)   // createSession 후
+
+sessionIdRef.current = state.session_id
+setHasSession(true)   // handleSelectSession 후
+
+sessionIdRef.current = null
+setHasSession(false)  // resetState 시
+
+// JSX 조건은 hasSession 사용
+{hasSession && <button>🔍 질문</button>}
+```
+
+**원칙**: `useRef.current`는 렌더링 사이클 밖의 값 보관용. UI 렌더링 조건에는 반드시 `useState`를 사용하세요.
+
+**수정 파일**: `frontend/src/App.tsx` — `hasSession` state 추가 (2026-04-19)
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.
