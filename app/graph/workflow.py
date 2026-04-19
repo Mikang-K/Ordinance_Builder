@@ -27,6 +27,7 @@ from app.graph.state import OrdinanceBuilderState
 # Compiled graph singleton — set by main.py lifespan after checkpointer init
 # ---------------------------------------------------------------------------
 _graph_app = None
+_db_instance = None
 
 
 def set_graph(compiled_graph) -> None:
@@ -38,6 +39,11 @@ def set_graph(compiled_graph) -> None:
 def get_graph():
     """컴파일된 그래프 싱글톤 반환."""
     return _graph_app
+
+
+def get_db():
+    """Neo4jGraphDB 싱글톤 반환 (QA 엔드포인트용 읽기 전용 접근)."""
+    return _db_instance
 
 
 def create_workflow(checkpointer: AsyncPostgresSaver):
@@ -70,7 +76,9 @@ def create_workflow(checkpointer: AsyncPostgresSaver):
     reviewer_llm = get_llm(settings.LLM_REVIEWER)
     legal_llm    = get_llm(settings.LLM_LEGAL)
 
+    global _db_instance
     db = Neo4jGraphDB(settings.NEO4J_URI, settings.NEO4J_USER, settings.NEO4J_PASSWORD)
+    _db_instance = db
 
     builder: StateGraph = StateGraph(OrdinanceBuilderState)
 

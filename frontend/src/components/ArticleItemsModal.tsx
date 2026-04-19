@@ -9,6 +9,9 @@ interface Props {
   fontSize: number
   onFontSizeChange: (size: number) => void
   similarOrdinances?: SimilarOrdinance[]
+  pendingQAContent?: string | null
+  onQAContentApplied?: () => void
+  onOpenQA?: () => void
 }
 
 const ARTICLE_GUIDES: Record<string, { title: string; hint: string; example?: string }> = {
@@ -63,6 +66,9 @@ export default function ArticleItemsModal({
   fontSize,
   onFontSizeChange,
   similarOrdinances = [],
+  pendingQAContent,
+  onQAContentApplied,
+  onOpenQA,
 }: Props) {
   // values: null means "AI default". string means "User Input". undefined means "not evaluated yet".
   const [values, setValues] = useState<Record<string, string | null>>({})
@@ -95,6 +101,17 @@ export default function ArticleItemsModal({
       })
     }
   }, [definitions, currentIndex, articles])
+
+  // Pre-fill from QA panel "apply" action
+  useEffect(() => {
+    if (!pendingQAContent) return
+    const currentKey = articles[currentIndex]
+    if (!currentKey || currentKey === '정의') return
+    if (window.confirm(`Q&A 답변 내용을 '${currentKey}' 조항에 적용하시겠습니까?\n\n기존 입력 내용이 대체됩니다.`)) {
+      setValues((prev) => ({ ...prev, [currentKey]: pendingQAContent }))
+    }
+    onQAContentApplied?.()
+  }, [pendingQAContent]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAllDefaults = () => {
     if (window.confirm("입력하지 않은 나머지 모든 항목을 '기본값(AI 자동 작성)'으로 넘기고 조례 초안을 생성하시겠습니까?")) {
@@ -207,6 +224,15 @@ export default function ArticleItemsModal({
                 title="글씨 크기 조절"
               />
             </div>
+            {onOpenQA && (
+              <button
+                onClick={onOpenQA}
+                style={{ fontSize: '0.85rem', padding: '6px 14px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
+                title="법령 Q&A 패널 열기"
+              >
+                🔍 질문하기
+              </button>
+            )}
             <button
               className="draft-modal-review-btn"
               onClick={handleAllDefaults}

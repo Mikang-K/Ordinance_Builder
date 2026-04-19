@@ -1,6 +1,7 @@
 import type {
   ChatResponse,
   FinalizeResponse,
+  QAResponse,
   SessionCreateResponse,
   SessionStateResponse,
   SessionSummary,
@@ -87,4 +88,17 @@ export async function deleteSession(sessionId: string): Promise<void> {
     headers: await authHeaders(),
   })
   if (!res.ok) throw new Error(`세션 삭제 실패: ${res.status}`)
+}
+
+export async function askQuestion(
+  sessionId: string,
+  question: string,
+): Promise<QAResponse> {
+  const res = await fetch(`/api/v1/session/${sessionId}/qa`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ question }),
+  })
+  if (!res.ok) throw new Error(`Q&A 요청 실패: ${res.status}`)
+  return res.json()
 }

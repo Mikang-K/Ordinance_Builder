@@ -1,10 +1,11 @@
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.api.schemas import (
     ArticleBatchRequest,
@@ -13,13 +14,18 @@ from app.api.schemas import (
     FinalizeRequest,
     FinalizeResponse,
     MessageRecord,
+    QARequest,
+    QAResponse,
+    QASource,
     SessionCreateRequest,
     SessionCreateResponse,
     SessionStateResponse,
     SessionSummary,
 )
 from app.core.auth import get_current_user
+from app.core.config import settings
 from app.core.limiter import limiter
+from app.core.llm import get_llm
 from app.db.session_store import (
     create_session as db_create_session,
     delete_session as db_delete_session,
@@ -27,7 +33,9 @@ from app.db.session_store import (
     list_sessions_by_user,
     update_session as db_update_session,
 )
-from app.graph.workflow import get_graph
+from app.graph.nodes._article_examples import find_article_examples
+from app.graph.workflow import get_db, get_graph
+from app.prompts.qa_agent import QA_SYSTEM, QAOutput, build_qa_human
 
 logger = logging.getLogger(__name__)
 
@@ -410,4 +418,110 @@ async def finalize_session(
         draft=final_draft,
         legal_issues=legal_issues,
         is_legally_valid=is_valid,
+    )
+
+
+def _extract_qa_keywords(question: str, ordinance_info: dict) -> list[str]:
+    base = [
+        ordinance_info.get("purpose", ""),
+        ordinance_info.get("target_group", ""),
+        ordinance_info.get("support_type", ""),
+        ordinance_info.get("industry_sector", ""),
+    ]
+    q_words = [w for w in question.split() if len(w) >= 2]
+    return [w for w in base + q_words if w][:10]
+
+
+@router.post("/session/{session_id}/qa", response_model=QAResponse)
+@limiter.limit("20/minute")
+async def qa_chat(
+    request: Request,
+    session_id: uuid.UUID,
+    body: QARequest,
+    user_id: str = Depends(get_current_user),
+):
+    """GraphRAG 기반 Q&A: Neo4j에서 법령·조례를 검색해 질문에 답변합니다. 워크플로우 state를 변경하지 않습니다."""
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
+
+    # 1. 체크포인트 읽기 (읽기 전용)
+    graph = get_graph()
+    config = {"configurable": {"thread_id": sid}}
+    state_snapshot = await graph.aget_state(config)
+    values = (state_snapshot.values or {}) if state_snapshot else {}
+
+    ordinance_info = values.get("ordinance_info", {})
+    article_examples_cache = values.get("article_examples", [])
+    current_article_key = values.get("current_article_key")
+    current_stage = values.get("current_stage", "")
+    draft_full_text = values.get("draft_full_text", "")
+
+    # 2. 키워드 추출
+    keywords = _extract_qa_keywords(body.question, ordinance_info)
+    support_type = ordinance_info.get("support_type", "")
+
+    # 3. GraphRAG 병렬 검색 (DB 없으면 degraded mode)
+    db = get_db()
+    legal_basis: list[dict] = []
+    legal_terms: list[dict] = []
+
+    if db:
+        try:
+            legal_basis, legal_terms = await asyncio.gather(
+                asyncio.to_thread(db.find_legal_basis, keywords, support_type),
+                asyncio.to_thread(db.find_legal_terms, keywords),
+            )
+        except Exception:
+            logger.warning("GraphRAG DB 검색 실패 — LLM 단독 답변으로 계속")
+
+    # 4. 조항 예시 필터링 (캐시 재사용, article_interviewing 단계만)
+    article_ex: list[dict] = []
+    if current_stage == "article_interviewing" and current_article_key and article_examples_cache:
+        article_ex = find_article_examples(current_article_key, article_examples_cache, max_count=3)
+
+    # 5. LLM 구조화 출력 호출
+    try:
+        llm = get_llm(settings.LLM_INTENT)
+        structured_llm = llm.with_structured_output(QAOutput)
+        human_text = build_qa_human(
+            question=body.question,
+            ordinance_info=ordinance_info,
+            legal_basis=legal_basis,
+            legal_terms=legal_terms,
+            article_examples=article_ex,
+            current_article_key=current_article_key,
+            draft_full_text=draft_full_text,
+        )
+        result: QAOutput = await structured_llm.ainvoke(
+            [SystemMessage(content=QA_SYSTEM), HumanMessage(content=human_text)]
+        )
+    except Exception as exc:
+        logger.exception("QA LLM 호출 실패 (session_id=%s)", sid)
+        raise HTTPException(status_code=500, detail="AI 답변 생성 중 오류가 발생했습니다.") from exc
+
+    # 6. 검색된 그래프 데이터로 sources 구성
+    sources: list[QASource] = []
+    for lb in legal_basis[:3]:
+        sources.append(QASource(
+            source_type="statute",
+            title=lb.get("statute_title", ""),
+            article_no=lb.get("provision_article", ""),
+            content=lb.get("provision_content", "")[:200],
+            relation_type=lb.get("relation_type", ""),
+        ))
+    for lt in legal_terms[:2]:
+        sources.append(QASource(
+            source_type="legal_term",
+            title=lt.get("source_statute", ""),
+            article_no=lt.get("term_name", ""),
+            content=lt.get("definition", "")[:200],
+            relation_type="DEFINES",
+        ))
+
+    return QAResponse(
+        answer=result.answer,
+        sources=sources,
+        applicable_content=result.applicable_content,
+        applicable_article_key=result.applicable_article_key,
     )

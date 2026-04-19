@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import type { ChatMessage, LegalIssue, SimilarOrdinance, Stage } from './types'
+import type { ChatMessage, LegalIssue, QAMessage, SimilarOrdinance, Stage } from './types'
 import { createSession, sendMessage, finalizeSession, getSessionState, submitArticlesBatch } from './api'
 import { auth, loginWithGoogle, logout, onAuthStateChanged } from './firebase'
 import type { User } from './firebase'
@@ -11,6 +11,7 @@ import SessionListScreen from './components/SessionListScreen'
 import ArticleItemsModal from './components/ArticleItemsModal'
 import LoadingModal from './components/LoadingModal'
 import CompletedDraftModal from './components/CompletedDraftModal'
+import QAPanel from './components/QAPanel'
 
 export default function App() {
   // ── 인증 상태 ──────────────────────────────────────────────────────────────
@@ -66,6 +67,10 @@ export default function App() {
   const [articleQueue, setArticleQueue] = useState<string[]>([])
   const [currentArticleKey, setCurrentArticleKey] = useState<string | null>(null)
   const [hideArticleModal, setHideArticleModal] = useState(false)
+  // QA Panel State
+  const [isQAPanelOpen, setIsQAPanelOpen] = useState(false)
+  const [qaHistory, setQaHistory] = useState<QAMessage[]>([])
+  const [pendingQAContent, setPendingQAContent] = useState<string | null>(null)
 
   const sessionIdRef = useRef<string | null>(null)
   const [fontSize, setFontSize] = useState<number>(16)
@@ -215,6 +220,9 @@ export default function App() {
     setArticleQueue([])
     setCurrentArticleKey(null)
     setHideArticleModal(false)
+    setIsQAPanelOpen(false)
+    setQaHistory([])
+    setPendingQAContent(null)
     setError(null)
     setInput('')
   }
@@ -411,6 +419,15 @@ export default function App() {
                 rows={2}
                 disabled={isLoading || isArticleModalOpen}
               />
+              {sessionIdRef.current && (
+                <button
+                  onClick={() => setIsQAPanelOpen(true)}
+                  title="법령 Q&A 패널 열기"
+                  style={{ padding: '10px 14px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}
+                >
+                  🔍 질문
+                </button>
+              )}
               <button
                 className="send-btn"
                 onClick={handleSend}
@@ -445,8 +462,27 @@ export default function App() {
           fontSize={fontSize}
           onFontSizeChange={setFontSize}
           similarOrdinances={similarOrdinances}
+          pendingQAContent={pendingQAContent}
+          onQAContentApplied={() => setPendingQAContent(null)}
+          onOpenQA={() => setIsQAPanelOpen(true)}
         />
       )}
+
+      <QAPanel
+        isOpen={isQAPanelOpen}
+        onClose={() => setIsQAPanelOpen(false)}
+        sessionId={sessionIdRef.current}
+        stage={stage}
+        currentArticleKey={currentArticleKey}
+        qaHistory={qaHistory}
+        onAddMessages={(msgs) => setQaHistory((prev) => [...prev, ...msgs])}
+        onApplyContent={(content) => {
+          setPendingQAContent(content)
+          setIsQAPanelOpen(false)
+          if (isArticleModalOpen && hideArticleModal) setHideArticleModal(false)
+        }}
+        fontSize={fontSize}
+      />
 
       {isCompletedDraftModalOpen && completedDraft && (
         <CompletedDraftModal

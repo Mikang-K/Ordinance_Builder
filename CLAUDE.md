@@ -984,5 +984,49 @@ anthropic.BadRequestError: 400 - `temperature` is deprecated for this model.
 
 ---
 
+### 16. GraphRAG 기반 Q&A 기능 (QAPanel)
+
+워크플로우 진행 단계와 무관하게 언제든 법령·조례 질의응답이 가능한 슬라이딩 패널 기능을 추가.
+
+**구현 파일 요약:**
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `app/api/schemas.py` | `QASource`, `QARequest`, `QAResponse` Pydantic 모델 추가 |
+| `app/prompts/qa_agent.py` | `QAOutput` 구조화 출력 모델 + `QA_SYSTEM` 프롬프트 + `build_qa_human()` RAG 컨텍스트 빌더 (신규) |
+| `app/graph/workflow.py` | `_db_instance` 전역 + `get_db()` 싱글톤 노출 (QA 엔드포인트가 읽기 전용으로 DB 공유) |
+| `app/api/routers/chat.py` | `POST /session/{id}/qa` 엔드포인트: GraphRAG 검색 + LLM 구조화 출력 |
+| `frontend/src/types.ts` | `QASource`, `QAMessage`, `QAResponse` 인터페이스 추가 |
+| `frontend/src/api.ts` | `askQuestion()` 함수 추가 |
+| `frontend/src/components/QAPanel.tsx` | 오른쪽 슬라이딩 패널 컴포넌트 (신규) |
+| `frontend/src/App.tsx` | `isQAPanelOpen`, `qaHistory`, `pendingQAContent` 상태 + QAPanel 렌더링 + 입력창에 "질문" 버튼 |
+| `frontend/src/components/ArticleItemsModal.tsx` | `pendingQAContent` pre-fill `useEffect` + "질문하기" 버튼 추가 |
+
+**GraphRAG 검색 4단계 fallback (chat.py `qa_chat`):**
+1. DELEGATES 탐색 — 상위법이 위임한 조례 영역
+2. BASED_ON 탐색 — 기존 조례의 법령 근거
+3. 키워드 검색 (질문 단어 + 조례 기본정보)
+4. `find_article_examples()` — `article_interviewing` 단계일 때 현재 조항 예시 (체크포인트 캐시 재사용)
+
+**`applicable_content` 적용 흐름:**
+```
+QAPanel에서 "현재 조항에 적용하기" 클릭
+→ App.tsx onApplyContent: pendingQAContent 설정 + QAPanel 닫기 + 모달 열기
+→ ArticleItemsModal useEffect: 현재 조항 textarea에 pre-fill (confirm 다이얼로그)
+→ onQAContentApplied 콜백으로 pendingQAContent 초기화
+```
+
+**z-index 계층:**
+- LoadingModal: 200
+- QAPanel: 150 (backdrop: 149)
+- DraftModal / ArticleItemsModal: 100
+
+**주의사항:**
+- QA 엔드포인트는 LangGraph 체크포인트를 **읽기 전용**으로만 접근 (`graph.aget_state`) — 워크플로우 상태 변경 없음
+- `applicable_content` 적용 버튼은 `stage === 'article_interviewing'` AND `applicable_article_key === currentArticleKey` 일치 시에만 표시
+- `정의` 조항은 구조화 입력(term/desc 쌍)을 사용하므로 pre-fill 적용 제외 (confirm 단계에서 조항 키 확인 후 처리)
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.

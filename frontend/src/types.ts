@@ -81,3 +81,26 @@ export interface SessionStateResponse {
   article_queue?: string[] | null
   current_article_key?: string | null
 }
+
+export interface QASource {
+  source_type: 'statute' | 'ordinance' | 'legal_term'
+  title: string
+  article_no: string
+  content: string
+  relation_type: string
+}
+
+export interface QAMessage {
+  role: 'user' | 'ai'
+  text: string
+  sources?: QASource[]
+  applicable_content?: string | null
+  applicable_article_key?: string | null
+}
+
+export interface QAResponse {
+  answer: string
+  sources: QASource[]
+  applicable_content?: string | null
+  applicable_article_key?: string | null
+}

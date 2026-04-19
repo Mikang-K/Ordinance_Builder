@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -94,3 +94,22 @@ class FinalizeResponse(BaseModel):
     draft: str
     legal_issues: list
     is_legally_valid: Optional[bool]
+
+
+class QASource(BaseModel):
+    source_type: Literal["statute", "ordinance", "legal_term"]
+    title: str
+    article_no: str
+    content: str
+    relation_type: str
+
+
+class QARequest(BaseModel):
+    question: str = Field(..., max_length=2000)
+
+
+class QAResponse(BaseModel):
+    answer: str
+    sources: list[QASource]
+    applicable_content: Optional[str] = None
+    applicable_article_key: Optional[str] = None
