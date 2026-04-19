@@ -16,6 +16,7 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   color: white;
   flex-shrink: 0;
   gap: 19px;
+  font-size: 16px;
 }
 .header-left { display: flex; align-items: baseline; gap: 14px; flex-shrink: 0; }
 .app-title { font-size: 1.5rem; font-weight: 700; }
