@@ -213,15 +213,15 @@ export default function ArticleItemsModal({
           </div>
           <div className="header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <div className="font-size-slider" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginRight: '16px' }}>
-              <span style={{ fontSize: '0.85rem', color: '#64748b' }}>가독성 폭</span>
-              <input 
-                type="range" 
-                min="12" 
-                max="24" 
-                value={fontSize} 
-                onChange={(e) => onFontSizeChange(Number(e.target.value))} 
-                style={{ width: '80px', accentColor: '#1e40af' }}
-                title="글씨 크기 조절"
+              <span style={{ fontSize: '0.85rem', color: '#64748b' }}>폰트 크기</span>
+              <input
+                type="range"
+                min="12"
+                max="24"
+                value={fontSize}
+                onChange={(e) => onFontSizeChange(Number(e.target.value))}
+                style={{ width: '120px', accentColor: '#1e40af' }}
+                title="폰트 크기"
               />
             </div>
             {onOpenQA && (

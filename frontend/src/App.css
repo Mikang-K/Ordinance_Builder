@@ -11,15 +11,15 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
+  padding: 14px 29px;
   background: #1e40af;
   color: white;
   flex-shrink: 0;
-  gap: 16px;
+  gap: 19px;
 }
-.header-left { display: flex; align-items: baseline; gap: 12px; flex-shrink: 0; }
-.app-title { font-size: 1.25rem; font-weight: 700; }
-.app-subtitle { font-size: 0.8rem; opacity: 0.75; }
+.header-left { display: flex; align-items: baseline; gap: 14px; flex-shrink: 0; }
+.app-title { font-size: 1.5rem; font-weight: 700; }
+.app-subtitle { font-size: 0.96rem; opacity: 0.75; }
 .header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .reset-btn {
   padding: 6px 14px;

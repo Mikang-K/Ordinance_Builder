@@ -780,13 +780,12 @@ npm install firebase
 
 유사 조례 목록에 국가법령정보센터 원문 링크를 달아 새 탭에서 열 수 있도록 구현합니다.
 
-**표시 위치 (3곳):**
+**표시 위치 (2곳):**
 
 | 위치 | 컴포넌트 | 표시 방식 |
 |------|----------|-----------|
 | 채팅창 하단 유사 조례 패널 | `SimilarOrdinancesPanel.tsx` | 각 조례 제목 옆 "원문 보기 ↗" 링크 버튼 |
 | 조례 상세 조항 설정 모달 — 진행 목차 아래 | `ArticleItemsModal.tsx` (스크롤 영역) | 최대 3건, "원문 ↗" 링크 |
-| 조례 상세 조항 설정 모달 — 작성 가이드 아래 | `ArticleItemsModal.tsx` (가이드 패널) | 최대 3건, "원문 ↗" 링크 (앰버 테마) |
 
 **`ArticleItemsModal.tsx` 사이드바 구조:**
 
@@ -797,11 +796,12 @@ npm install firebase
 │   └── 유사 조례 (최대 3건 + 원문 ↗ 링크)   ← 스크롤 영역
 └── 가이드 패널 (#fffbeb, overflowY: auto, maxHeight: 280px)
     ├── 💡 작성 가이드 (hint)
-    ├── 예시 텍스트 (있는 경우)
-    └── 📋 유사 조례 참고 (최대 3건 + 원문 ↗ 링크)  ← 가이드 패널 내
+    └── 예시 텍스트 (있는 경우)
 ```
 
 **가이드 패널 `maxHeight: 280px` 이유**: 패널이 무한히 늘어나면 스크롤 영역(진행 목차)이 밀려 조항 이동이 어려워지므로 상한 지정 후 내부 스크롤 처리.
+
+> **주의**: 가이드 패널(노란 영역) 안에는 유사 조례를 표시하지 않습니다. 유사 조례는 스크롤 영역(진행 목차 아래)에만 표시합니다. 가이드 패널에 유사 조례를 추가하면 배포 빌드를 재생성해야 하므로 주의가 필요합니다.
 
 **데이터 연결 (`App.tsx`):**
 
@@ -1028,39 +1028,33 @@ QAPanel에서 "현재 조항에 적용하기" 클릭
 
 ---
 
-### 17. `useRef`를 JSX 조건으로 사용하면 버튼이 표시되지 않음
+### 17. "🔍 질문" 버튼 — 헤더 상단 고정 배치
 
-**증상**: 세션이 존재함에도 "🔍 질문" 버튼이 화면에 나타나지 않음.
+**경위**:
+1. 초기 구현: 입력창 영역에 `{sessionIdRef.current && <button>}` 조건으로 배치
+2. 문제: `useRef`는 `.current` 변경 시 리렌더링 미발생 → 버튼이 세션 생성 후에도 표시 안 됨
+3. 1차 수정: `hasSession` useState 추가로 임시 해결
+4. 최종 수정: 버튼을 헤더 `header-actions`로 이동 + 조건 제거 (항상 표시)
 
-**원인**: `sessionIdRef`는 `useRef`라서 `.current` 값이 바뀌어도 React 리렌더링을 트리거하지 않음.
-따라서 `{sessionIdRef.current && <button>}` 조건이 세션 생성 후에도 초기값 `null`로 평가됨.
-
-**수정** (`frontend/src/App.tsx`):
+**최종 구현** (`frontend/src/App.tsx`):
 
 ```typescript
-// ❌ useRef는 변경 시 리렌더링 없음 → 버튼 미표시
-{sessionIdRef.current && <button>🔍 질문</button>}
-
-// ✅ useState로 별도 관리
-const [hasSession, setHasSession] = useState(false)
-
-// ref 설정과 동시에 state도 업데이트
-sessionIdRef.current = res.session_id
-setHasSession(true)   // createSession 후
-
-sessionIdRef.current = state.session_id
-setHasSession(true)   // handleSelectSession 후
-
-sessionIdRef.current = null
-setHasSession(false)  // resetState 시
-
-// JSX 조건은 hasSession 사용
-{hasSession && <button>🔍 질문</button>}
+// 헤더 header-actions에 무조건 렌더링
+<button
+  onClick={() => setIsQAPanelOpen(true)}
+  title="법령 Q&A 패널 열기"
+  style={{ ... background: '#0f766e' ... }}
+>
+  🔍 질문
+</button>
 ```
 
-**원칙**: `useRef.current`는 렌더링 사이클 밖의 값 보관용. UI 렌더링 조건에는 반드시 `useState`를 사용하세요.
+- `hasSession` 상태 완전 제거 (`useState`, `setHasSession` 호출 3곳 모두)
+- 세션 없을 때 QAPanel 내 입력창·전송 버튼이 `disabled` 처리되므로 UX 안전
 
-**수정 파일**: `frontend/src/App.tsx` — `hasSession` state 추가 (2026-04-19)
+**원칙**: `useRef.current`는 렌더링 사이클 밖의 값 보관용. UI 조건 렌더링에는 `useState`를 사용하거나, 조건 자체를 제거해 항상 표시하는 방향이 단순함.
+
+**수정 파일**: `frontend/src/App.tsx` — 질문 버튼 헤더 이동, `hasSession` 제거 (2026-04-19)
 
 ---
 

@@ -71,7 +71,6 @@ export default function App() {
   const [isQAPanelOpen, setIsQAPanelOpen] = useState(false)
   const [qaHistory, setQaHistory] = useState<QAMessage[]>([])
   const [pendingQAContent, setPendingQAContent] = useState<string | null>(null)
-  const [hasSession, setHasSession] = useState(false)
 
   const sessionIdRef = useRef<string | null>(null)
   const [fontSize, setFontSize] = useState<number>(16)
@@ -144,7 +143,6 @@ export default function App() {
       if (!sessionIdRef.current) {
         const res = await createSession(text)
         sessionIdRef.current = res.session_id
-        setHasSession(true)
         applyResponse({ ...res, is_complete: false })
       } else {
         const res = await sendMessage(sessionIdRef.current, text)
@@ -209,7 +207,6 @@ export default function App() {
 
   const resetState = () => {
     sessionIdRef.current = null
-    setHasSession(false)
     setMessages([])
     setStage(null)
     setPendingDraft(null)
@@ -246,7 +243,6 @@ export default function App() {
       const state = await getSessionState(sessionId)
       resetState()
       sessionIdRef.current = state.session_id
-      setHasSession(true)
       setMessages(state.messages)
       setStage(state.stage as Stage)
 
@@ -345,15 +341,15 @@ export default function App() {
         <StageIndicator stage={stage} />
         <div className="header-actions">
           <div className="font-size-slider" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginRight: '8px' }}>
-            <span style={{ fontSize: '0.85rem', opacity: 0.9 }}>글씨 크기</span>
-            <input 
-              type="range" 
-              min="12" 
-              max="24" 
-              value={fontSize} 
-              onChange={(e) => setFontSize(Number(e.target.value))} 
-              style={{ width: '80px', accentColor: '#ffffff' }}
-              title="글씨 크기 조절"
+            <span style={{ fontSize: '0.85rem', opacity: 0.9 }}>폰트 크기</span>
+            <input
+              type="range"
+              min="12"
+              max="24"
+              value={fontSize}
+              onChange={(e) => setFontSize(Number(e.target.value))}
+              style={{ width: '120px', accentColor: '#ffffff' }}
+              title="폰트 크기"
             />
           </div>
           {isArticleModalOpen && hideArticleModal && (
@@ -371,6 +367,13 @@ export default function App() {
               확정 초안 보기
             </button>
           )}
+          <button
+            onClick={() => setIsQAPanelOpen(true)}
+            title="법령 Q&A 패널 열기"
+            style={{ padding: '6px 14px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}
+          >
+            🔍 질문
+          </button>
           <button className="reset-btn" onClick={handleReset}>목록</button>
           <div style={userInfoStyle}>
             {user.photoURL && (
@@ -423,15 +426,6 @@ export default function App() {
                 rows={2}
                 disabled={isLoading || isArticleModalOpen}
               />
-              {hasSession && (
-                <button
-                  onClick={() => setIsQAPanelOpen(true)}
-                  title="법령 Q&A 패널 열기"
-                  style={{ padding: '10px 14px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}
-                >
-                  🔍 질문
-                </button>
-              )}
               <button
                 className="send-btn"
                 onClick={handleSend}
