@@ -218,6 +218,7 @@ export default function ArticleItemsModal({
                 type="range"
                 min="12"
                 max="24"
+                step="0.5"
                 value={fontSize}
                 onChange={(e) => onFontSizeChange(Number(e.target.value))}
                 style={{ width: '120px', accentColor: '#1e40af' }}

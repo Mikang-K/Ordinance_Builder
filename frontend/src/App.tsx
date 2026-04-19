@@ -346,6 +346,7 @@ export default function App() {
               type="range"
               min="12"
               max="24"
+              step="0.5"
               value={fontSize}
               onChange={(e) => setFontSize(Number(e.target.value))}
               style={{ width: '120px', accentColor: '#ffffff' }}
