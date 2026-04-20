@@ -19,8 +19,8 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   font-size: 16px;
 }
 .header-left { display: flex; align-items: baseline; gap: 14px; flex-shrink: 0; }
-.app-title { font-size: 1.5rem; font-weight: 700; }
-.app-subtitle { font-size: 0.96rem; opacity: 0.75; }
+.app-title { font-size: 1.5em; font-weight: 700; }
+.app-subtitle { font-size: 0.96em; opacity: 0.75; }
 .header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .reset-btn {
   padding: 6px 14px;
@@ -29,7 +29,7 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   color: white;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.85em;
   white-space: nowrap;
   touch-action: manipulation;
 }
@@ -59,14 +59,14 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.65rem;
+  font-size: 0.65em;
   font-weight: 700;
   flex-shrink: 0;
   transition: all 0.3s;
 }
 .stage-step.done .stage-dot { background: #22c55e; border-color: #22c55e; }
 .stage-step.active .stage-dot { background: white; color: #1e40af; border-color: white; }
-.stage-label { font-size: 0.7rem; opacity: 0.8; white-space: nowrap; }
+.stage-label { font-size: 0.7em; opacity: 0.8; white-space: nowrap; }
 .stage-step.active .stage-label { opacity: 1; font-weight: 600; }
 .stage-line {
   width: 20px;
@@ -643,7 +643,7 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   .stage-label { display: none; }
   /* Lines stretch to fill available space between dots */
   .stage-line { flex: 1; width: auto; min-width: 8px; margin: 0 2px; }
-  .stage-dot { width: 22px; height: 22px; font-size: 0.6rem; }
+  .stage-dot { width: 22px; height: 22px; font-size: 0.6em; }
   .stage-step { gap: 0; }
 
   /* Main: stack vertically */
@@ -726,8 +726,8 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
 
 /* Very small screens (< 360px): tighten header */
 @media (max-width: 359px) {
-  .app-title { font-size: 1rem; }
-  .stage-dot { width: 18px; height: 18px; font-size: 0.55rem; }
+  .app-title { font-size: 1em; }
+  .stage-dot { width: 18px; height: 18px; font-size: 0.55em; }
 }
 
 /* ─── Loading Modal ─── */
