@@ -371,7 +371,7 @@ export default function App() {
           <button
             onClick={() => setIsQAPanelOpen(true)}
             title="법령 Q&A 패널 열기"
-            style={{ padding: '6px 14px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85em', fontWeight: 600, whiteSpace: 'nowrap' }}
+            style={{ padding: '6px 14px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}
           >
             🔍 질문
           </button>
@@ -380,7 +380,7 @@ export default function App() {
             {user.photoURL && (
               <img src={user.photoURL} alt="프로필" style={avatarStyle} referrerPolicy="no-referrer" />
             )}
-            <span style={{ fontSize: '0.85em', opacity: 0.9, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: '0.85rem', opacity: 0.9, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user.displayName || user.email}
             </span>
             <button className="reset-btn" onClick={handleLogout} style={{ marginLeft: '4px' }}>
