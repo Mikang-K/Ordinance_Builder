@@ -71,6 +71,7 @@ export default function App() {
   const [isQAPanelOpen, setIsQAPanelOpen] = useState(false)
   const [qaHistory, setQaHistory] = useState<QAMessage[]>([])
   const [pendingQAContent, setPendingQAContent] = useState<string | null>(null)
+  const [hasSession, setHasSession] = useState(false)
 
   const sessionIdRef = useRef<string | null>(null)
   const [fontSize, setFontSize] = useState<number>(16)
@@ -100,7 +101,7 @@ export default function App() {
       setSimilarOrdinances(res.similar_ordinances)
     }
 
-    if (res.article_queue !== undefined) setArticleQueue(res.article_queue)
+    if (res.article_queue != null) setArticleQueue(res.article_queue)
     if (res.current_article_key !== undefined) setCurrentArticleKey(res.current_article_key)
 
 
@@ -143,6 +144,7 @@ export default function App() {
       if (!sessionIdRef.current) {
         const res = await createSession(text)
         sessionIdRef.current = res.session_id
+        setHasSession(true)
         applyResponse({ ...res, is_complete: false })
       } else {
         const res = await sendMessage(sessionIdRef.current, text)
@@ -223,6 +225,7 @@ export default function App() {
     setIsQAPanelOpen(false)
     setQaHistory([])
     setPendingQAContent(null)
+    setHasSession(false)
     setError(null)
     setInput('')
   }
@@ -243,6 +246,7 @@ export default function App() {
       const state = await getSessionState(sessionId)
       resetState()
       sessionIdRef.current = state.session_id
+      setHasSession(true)
       setMessages(state.messages)
       setStage(state.stage as Stage)
 
@@ -368,13 +372,15 @@ export default function App() {
               확정 초안 보기
             </button>
           )}
-          <button
-            onClick={() => setIsQAPanelOpen(true)}
-            title="법령 Q&A 패널 열기"
-            style={{ padding: '6px 14px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}
-          >
-            🔍 질문
-          </button>
+          {hasSession && (
+            <button
+              onClick={() => setIsQAPanelOpen(true)}
+              title="법령 Q&A 패널 열기"
+              style={{ padding: '6px 14px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}
+            >
+              🔍 질문
+            </button>
+          )}
           <button className="reset-btn" onClick={handleReset}>목록</button>
           <div style={userInfoStyle}>
             {user.photoURL && (

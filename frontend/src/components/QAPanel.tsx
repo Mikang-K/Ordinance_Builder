@@ -120,13 +120,47 @@ function QAMessageBubble({
   )
 }
 
+const MIN_WIDTH = 280
+const MAX_WIDTH_RATIO = 0.9
+
 export default function QAPanel({
   isOpen, onClose, sessionId, stage, currentArticleKey,
   qaHistory, onAddMessages, onApplyContent, fontSize,
 }: Props) {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [panelWidth, setPanelWidth] = useState(440)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const isDragging = useRef(false)
+  const dragStartX = useRef(0)
+  const dragStartWidth = useRef(0)
+
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    isDragging.current = true
+    dragStartX.current = e.clientX
+    dragStartWidth.current = panelWidth
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isDragging.current) return
+      const delta = dragStartX.current - ev.clientX
+      const maxWidth = Math.floor(window.innerWidth * MAX_WIDTH_RATIO)
+      setPanelWidth(Math.min(Math.max(dragStartWidth.current + delta, MIN_WIDTH), maxWidth))
+    }
+
+    const onMouseUp = () => {
+      isDragging.current = false
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+    }
+
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'ew-resize'
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }
 
   useEffect(() => {
     if (isOpen) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -176,7 +210,7 @@ export default function QAPanel({
       <div
         style={{
           position: 'fixed', top: 0, right: 0, height: '100%',
-          width: 'min(440px, 100vw)',
+          width: Math.min(panelWidth, window.innerWidth),
           background: '#ffffff',
           boxShadow: '-8px 0 32px rgba(0,0,0,0.18)',
           zIndex: 150,
@@ -185,6 +219,16 @@ export default function QAPanel({
           fontSize: `${fontSize}px`,
         }}
       >
+        {/* Drag handle */}
+        <div
+          onMouseDown={handleDragStart}
+          style={{
+            position: 'absolute', top: 0, left: 0, width: 6, height: '100%',
+            cursor: 'ew-resize', zIndex: 1,
+            background: 'transparent',
+          }}
+          title="드래그하여 너비 조정"
+        />
         {/* Header */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',

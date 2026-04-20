@@ -1028,33 +1028,37 @@ QAPanel에서 "현재 조항에 적용하기" 클릭
 
 ---
 
-### 17. "🔍 질문" 버튼 — 헤더 상단 고정 배치
+### 17. "🔍 질문" 버튼 — 헤더 상단 고정 배치 + 세션 기반 활성화
 
 **경위**:
 1. 초기 구현: 입력창 영역에 `{sessionIdRef.current && <button>}` 조건으로 배치
 2. 문제: `useRef`는 `.current` 변경 시 리렌더링 미발생 → 버튼이 세션 생성 후에도 표시 안 됨
 3. 1차 수정: `hasSession` useState 추가로 임시 해결
-4. 최종 수정: 버튼을 헤더 `header-actions`로 이동 + 조건 제거 (항상 표시)
+4. 2차 수정: 버튼을 헤더 `header-actions`로 이동 + 조건 제거 (항상 표시, `hasSession` 제거)
+5. 2차 수정: `hasSession` state 재도입 — 버튼은 항상 표시하되, 세션이 없으면 `disabled` 처리
+6. **최종 수정**: 버튼을 세션 없을 때 완전히 숨김 (`{hasSession && <button>}`)
 
 **최종 구현** (`frontend/src/App.tsx`):
 
 ```typescript
-// 헤더 header-actions에 무조건 렌더링
-<button
-  onClick={() => setIsQAPanelOpen(true)}
-  title="법령 Q&A 패널 열기"
-  style={{ ... background: '#0f766e' ... }}
->
-  🔍 질문
-</button>
+// hasSession state — 세션 생성/복원 시 true, resetState 시 false
+const [hasSession, setHasSession] = useState(false)
+
+// 헤더 버튼 — 세션 있을 때만 렌더링
+{hasSession && (
+  <button
+    onClick={() => setIsQAPanelOpen(true)}
+    title="법령 Q&A 패널 열기"
+    style={{ background: '#0f766e', ... }}
+  >
+    🔍 질문
+  </button>
+)}
 ```
 
-- `hasSession` 상태 완전 제거 (`useState`, `setHasSession` 호출 3곳 모두)
-- 세션 없을 때 QAPanel 내 입력창·전송 버튼이 `disabled` 처리되므로 UX 안전
+**원칙**: `useRef.current`는 렌더링 사이클 밖의 값 보관용. UI 조건 렌더링에는 별도 `useState` 필요.
 
-**원칙**: `useRef.current`는 렌더링 사이클 밖의 값 보관용. UI 조건 렌더링에는 `useState`를 사용하거나, 조건 자체를 제거해 항상 표시하는 방향이 단순함.
-
-**수정 파일**: `frontend/src/App.tsx` — 질문 버튼 헤더 이동, `hasSession` 제거 (2026-04-19)
+**수정 파일**: `frontend/src/App.tsx` — 질문 버튼 세션 없을 때 완전히 숨김 (2026-04-20)
 
 ---
 

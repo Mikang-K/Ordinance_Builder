@@ -203,7 +203,7 @@ export default function ArticleItemsModal({
           boxShadow: '0 8px 32px rgba(0,0,0,0.18)'
         }}
       >
-        <div className="draft-modal-header" style={{ padding: '16px 24px' }}>
+        <div className="draft-modal-header" style={{ padding: '16px 24px', height: '70px', boxSizing: 'border-box', flexShrink: 0 }}>
           <div className="draft-modal-title">
             <span className="draft-modal-icon">📋</span>
             <h2>조례 상세 조항 설정</h2>
@@ -212,19 +212,6 @@ export default function ArticleItemsModal({
             </span>
           </div>
           <div className="header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <div className="font-size-slider" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginRight: '16px' }}>
-              <span style={{ fontSize: '0.85rem', color: '#64748b' }}>폰트 크기</span>
-              <input
-                type="range"
-                min="12"
-                max="24"
-                step="0.5"
-                value={fontSize}
-                onChange={(e) => onFontSizeChange(Number(e.target.value))}
-                style={{ width: '120px', accentColor: '#1e40af' }}
-                title="폰트 크기"
-              />
-            </div>
             {onOpenQA && (
               <button
                 onClick={onOpenQA}
@@ -243,6 +230,19 @@ export default function ArticleItemsModal({
             >
               전체 기본값 및 즉시 제출
             </button>
+            <div className="font-size-slider" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.85rem', color: '#64748b' }}>폰트 크기</span>
+              <input
+                type="range"
+                min="12"
+                max="24"
+                step="0.5"
+                value={fontSize}
+                onChange={(e) => onFontSizeChange(Number(e.target.value))}
+                style={{ width: '120px', accentColor: '#1e40af' }}
+                title="폰트 크기"
+              />
+            </div>
             <button className="draft-modal-close" onClick={onClose} aria-label="닫기">
               ✕
             </button>
