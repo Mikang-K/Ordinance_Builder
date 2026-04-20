@@ -337,10 +337,7 @@ export default function App() {
         <div className="header-left">
           <h1 className="app-title">조례 빌더 AI</h1>
           <span className="app-subtitle">지방 조례 초안 자동 생성 서비스</span>
-        </div>
-        <StageIndicator stage={stage} />
-        <div className="header-actions">
-          <div className="font-size-slider" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginRight: '8px' }}>
+          <div className="font-size-slider" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span style={{ fontSize: '0.85em', opacity: 0.9 }}>폰트 크기</span>
             <input
               type="range"
@@ -353,6 +350,9 @@ export default function App() {
               title="폰트 크기"
             />
           </div>
+        </div>
+        <StageIndicator stage={stage} />
+        <div className="header-actions">
           {isArticleModalOpen && hideArticleModal && (
             <button className="open-draft-btn" onClick={() => setHideArticleModal(false)}>
               상세 조항 편집
