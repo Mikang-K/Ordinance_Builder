@@ -3,8 +3,9 @@ import {
   GoogleAuthProvider,
   User,
   getAuth,
+  getRedirectResult,
   onAuthStateChanged,
-  signInWithPopup,
+  signInWithRedirect,
   signOut,
 } from 'firebase/auth'
 
@@ -18,9 +19,9 @@ const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const googleProvider = new GoogleAuthProvider()
 
-export const loginWithGoogle = () => signInWithPopup(auth, googleProvider)
+export const loginWithGoogle = () => signInWithRedirect(auth, googleProvider)
 export const logout = () => signOut(auth)
-export { onAuthStateChanged }
+export { onAuthStateChanged, getRedirectResult }
 export type { User }
 
 /**

@@ -108,6 +108,10 @@ class QARequest(BaseModel):
     question: str = Field(..., max_length=2000)
 
 
+class QADirectRequest(BaseModel):
+    question: str = Field(..., max_length=500, description="직접 검색 질문 — 세션 컨텍스트 없이 DB 전체 벡터 검색")
+
+
 class QAResponse(BaseModel):
     answer: str
     sources: list[QASource]

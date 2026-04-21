@@ -12,7 +12,7 @@ from app.api.routers.chat import router as chat_router
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logging_config import setup_logging
-from app.db.session_store import init_db
+from app.db.session_store import close_db, init_db
 from app.graph.workflow import create_workflow, set_graph
 
 setup_logging(settings.LOG_LEVEL)
@@ -67,9 +67,12 @@ async def lifespan(app: FastAPI):
         except Exception:
             # 다른 워커가 이미 setup을 완료한 경우 UniqueViolation 등이 발생할 수 있음 — 무시
             pass
-        await init_db()                     # sessions 테이블 생성
+        await init_db()                     # sessions 테이블 생성 + 커넥션 풀 초기화
         set_graph(create_workflow(checkpointer))
-        yield
+        try:
+            yield
+        finally:
+            await close_db()                # 커넥션 풀 정리
     # context manager 종료 시 checkpointer 연결 풀 자동 정리
 
 

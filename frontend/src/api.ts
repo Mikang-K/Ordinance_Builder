@@ -102,3 +102,15 @@ export async function askQuestion(
   if (!res.ok) throw new Error(`Q&A 요청 실패: ${res.status}`)
   return res.json()
 }
+
+export async function searchDirectQuestion(
+  question: string,
+): Promise<QAResponse> {
+  const res = await fetch('/api/v1/qa', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ question }),
+  })
+  if (!res.ok) throw new Error(`직접 검색 Q&A 요청 실패: ${res.status}`)
+  return res.json()
+}

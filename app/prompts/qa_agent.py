@@ -80,3 +80,46 @@ def build_qa_human(
         )
 
     return "\n".join(lines)
+
+
+def build_qa_human_direct(
+    question: str,
+    legal_basis: list[dict],
+    legal_terms: list[dict],
+    similar_ordinances: list[dict] | None = None,
+) -> str:
+    """세션 컨텍스트 없이 벡터 검색 결과만으로 구성하는 QA 프롬프트 빌더."""
+    lines = []
+
+    if legal_basis:
+        lines.append("[관련 법령 조항 — 벡터 유사도 검색 결과]")
+        for lb in legal_basis[:5]:
+            rel = lb.get("relation_type", "")
+            title = lb.get("statute_title", "")
+            article = lb.get("provision_article", "")
+            content = lb.get("provision_content", "")[:200]
+            lines.append(f"• [{rel}] {title} {article}: {content}")
+
+    if similar_ordinances:
+        lines.append("\n[유사 조례 — 벡터 유사도 검색 결과]")
+        for o in similar_ordinances[:3]:
+            region = o.get("region_name", "")
+            title = o.get("title", "")
+            reason = o.get("relevance_reason", "")
+            lines.append(f"• {region} 《{title}》 — {reason}")
+
+    if legal_terms:
+        lines.append("\n[관련 법률 용어 정의]")
+        for lt in legal_terms[:5]:
+            term = lt.get("term_name", "")
+            defn = lt.get("definition", "")[:200]
+            source = lt.get("source_statute", "")
+            lines.append(f"• {term}: {defn} (출처: {source})")
+
+    if not lines:
+        lines.append("(관련 법령·조례 데이터를 찾지 못했습니다. 일반 법령 지식으로 답변합니다.)")
+
+    lines.append(f"\n[질문]\n{question}")
+    lines.append("\napplicable_content와 applicable_article_key는 null로 두세요.")
+
+    return "\n".join(lines)

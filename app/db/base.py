@@ -121,3 +121,44 @@ class GraphDBInterface(ABC):
             statute_title, conflict_content, confidence
         """
         ...
+
+    @abstractmethod
+    def vector_search_provisions(
+        self,
+        embedding: list[float],
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """
+        Semantic search over Provision nodes using a pre-computed embedding.
+
+        Neo4j Cypher equivalent:
+            CALL db.index.vector.queryNodes('idx_provision_embedding', $limit, $embedding)
+            YIELD node AS p, score
+            MATCH (s:Statute)-[:CONTAINS]->(p)
+            RETURN s.id, s.title, p.article_no, p.content_text, 'VECTOR_MATCH', score
+
+        Returns list of dicts with keys:
+            statute_id, statute_title, provision_article,
+            provision_content, relation_type ('VECTOR_MATCH')
+        """
+        ...
+
+    @abstractmethod
+    def vector_search_ordinances(
+        self,
+        embedding: list[float],
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """
+        Semantic search over Ordinance nodes using a pre-computed embedding.
+
+        Neo4j Cypher equivalent:
+            CALL db.index.vector.queryNodes('idx_ordinance_embedding', $limit, $embedding)
+            YIELD node AS o, score
+            RETURN o.id, o.region_name, o.title, score, '벡터 유사도 기반 추천'
+
+        Returns list of dicts with keys:
+            ordinance_id, region_name, title,
+            similarity_score, relevance_reason
+        """
+        ...

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { ChatMessage, LegalIssue, QAMessage, SimilarOrdinance, Stage } from './types'
 import { createSession, sendMessage, finalizeSession, getSessionState, submitArticlesBatch } from './api'
-import { auth, loginWithGoogle, logout, onAuthStateChanged } from './firebase'
+import { auth, loginWithGoogle, logout, onAuthStateChanged, getRedirectResult } from './firebase'
 import type { User } from './firebase'
 import StageIndicator from './components/StageIndicator'
 import ChatWindow from './components/ChatWindow'
@@ -19,6 +19,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
+    getRedirectResult(auth).catch((e) => console.error('redirect auth error:', e))
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser)
       setAuthLoading(false)

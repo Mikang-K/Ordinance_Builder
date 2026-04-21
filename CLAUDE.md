@@ -1062,5 +1062,81 @@ const [hasSession, setHasSession] = useState(false)
 
 ---
 
+### 18. Firebase 인증 — `signInWithRedirect` 적용 완료 (2026-04-21)
+
+**수정 파일**: `frontend/src/firebase.ts`, `frontend/src/App.tsx`
+
+CLAUDE.md §5에 기록된 금지 사항대로 `signInWithPopup` → `signInWithRedirect`로 전환.
+`getRedirectResult`를 export하고, `App.tsx`의 인증 `useEffect` 상단에서 호출.
+
+```typescript
+// firebase.ts
+export const loginWithGoogle = () => signInWithRedirect(auth, googleProvider)
+export { onAuthStateChanged, getRedirectResult }
+
+// App.tsx useEffect
+getRedirectResult(auth).catch((e) => console.error('redirect auth error:', e))
+```
+
+**체크리스트**: `signInWithPopup`은 절대 사용하지 말 것. 새 Firebase Auth 코드 작성 시 §5 참조.
+
+---
+
+### 19. PostgreSQL 커넥션 풀 도입 (2026-04-21)
+
+**수정 파일**: `app/db/session_store.py`, `app/main.py`, `requirements.txt`
+
+**문제**: 모든 DB 함수가 `psycopg.AsyncConnection.connect()`를 요청마다 새로 호출 → Cloud Run 부하 시 503 위험.
+
+**해결**: `psycopg-pool` 패키지의 `AsyncConnectionPool`을 도입. `init_db()`에서 풀 생성, `close_db()`에서 정리.
+
+```python
+# session_store.py
+_pool: AsyncConnectionPool | None = None
+
+async def init_db() -> None:
+    global _pool
+    _pool = AsyncConnectionPool(settings.POSTGRES_URL, min_size=2, max_size=10, open=False)
+    await _pool.open()
+    ...
+
+async def close_db() -> None:
+    if _pool: await _pool.close()
+```
+
+```python
+# main.py lifespan
+await init_db()
+try:
+    yield
+finally:
+    await close_db()
+```
+
+**체크리스트**: 새 DB 함수 작성 시 `_pool.connection()` 컨텍스트 사용. `dict_row`가 필요한 SELECT는 `conn.cursor(row_factory=dict_row)` 사용.
+
+---
+
+### 20. LangGraph 노드 async 전환 (2026-04-21)
+
+**수정 파일**: `app/graph/nodes/intent_analyzer.py`, `drafting_agent.py`, `draft_reviewer.py`, `legal_checker.py`
+
+**문제**: LLM 호출 노드 4개가 `def` + `llm.invoke()` (동기) 사용 → FastAPI async 워커를 LLM 응답 대기 시간(수십 초) 동안 완전 블로킹 → 동시 요청 처리 불가.
+
+**해결**: 4개 노드 모두 `async def`로 변환 + `await llm.ainvoke()` 사용.
+
+```python
+# Before
+def intent_analyzer_node(...): extracted = structured_llm.invoke(messages)
+# After
+async def intent_analyzer_node(...): extracted = await structured_llm.ainvoke(messages)
+```
+
+**영향 없는 노드** (LLM 미사용, sync 유지): `graph_retriever`, `article_planner`, `article_interviewer`, `interviewer`
+
+**체크리스트**: 새 LLM 호출 노드는 반드시 `async def` + `await llm.ainvoke()` 패턴 사용. `langchain_anthropic`, `langchain_openai`, `langchain_google_genai` 모두 `ainvoke` 지원.
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.

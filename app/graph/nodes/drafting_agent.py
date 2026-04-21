@@ -24,7 +24,7 @@ class OrdinanceDraft(BaseModel):
     full_text: str = Field(description="제목과 전체 조문을 합친 완성 텍스트")
 
 
-def drafting_agent_node(
+async def drafting_agent_node(
     state: OrdinanceBuilderState,
     llm: BaseChatModel,
 ) -> dict:
@@ -51,7 +51,7 @@ def drafting_agent_node(
         info, len(legal_basis), len(similar), len(article_contents),
     )
     human_prompt = build_drafting_human(info, legal_basis, similar, article_contents, legal_terms)
-    result: OrdinanceDraft = structured_llm.invoke(
+    result: OrdinanceDraft = await structured_llm.ainvoke(
         [("system", DRAFTING_SYSTEM), ("human", human_prompt)]
     )
 

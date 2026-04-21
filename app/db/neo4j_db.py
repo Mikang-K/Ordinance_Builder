@@ -292,6 +292,63 @@ class Neo4jGraphDB(GraphDBInterface):
             result = session.run(query, ids=ordinance_ids)
             return [dict(r) for r in result]
 
+    def vector_search_provisions(
+        self,
+        embedding: list[float],
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """
+        Semantic search over Provision nodes via idx_provision_embedding.
+
+        Returns empty list when the index is unavailable (e.g., AuraDB with
+        SKIP_PROVISION_EMBEDDING=true) — callers must handle gracefully.
+        """
+        query = """
+        CALL db.index.vector.queryNodes('idx_provision_embedding', $limit, $embedding)
+        YIELD node AS p, score
+        MATCH (s:Statute)-[:CONTAINS]->(p)
+        RETURN DISTINCT
+               s.id           AS statute_id,
+               s.title        AS statute_title,
+               p.article_no   AS provision_article,
+               p.content_text AS provision_content,
+               'VECTOR_MATCH'  AS relation_type
+        ORDER BY score DESC
+        LIMIT $limit
+        """
+        try:
+            with self._driver.session() as session:
+                result = session.run(query, embedding=embedding, limit=limit)
+                return [dict(r) for r in result]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("vector_search_provisions failed: %s", exc)
+            return []
+
+    def vector_search_ordinances(
+        self,
+        embedding: list[float],
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Semantic search over Ordinance nodes via idx_ordinance_embedding."""
+        query = """
+        CALL db.index.vector.queryNodes('idx_ordinance_embedding', $limit, $embedding)
+        YIELD node AS o, score
+        RETURN o.id          AS ordinance_id,
+               o.region_name AS region_name,
+               o.title       AS title,
+               score         AS similarity_score,
+               '벡터 유사도 기반 추천' AS relevance_reason
+        ORDER BY score DESC
+        LIMIT $limit
+        """
+        try:
+            with self._driver.session() as session:
+                result = session.run(query, embedding=embedding, limit=limit)
+                return [dict(r) for r in result]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("vector_search_ordinances failed: %s", exc)
+            return []
+
     def get_legal_conflicts(
         self,
         ordinance_id: str,

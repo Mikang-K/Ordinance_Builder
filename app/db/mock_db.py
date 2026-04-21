@@ -155,6 +155,46 @@ class MockGraphDB(GraphDBInterface):
             if any(kw in t["term_name"] for kw in keywords)
         ][:limit]
 
+    def vector_search_provisions(
+        self,
+        embedding: list[float],
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        # Mock: return first N provisions regardless of embedding similarity.
+        # In tests this is sufficient; real semantic ranking only matters in production.
+        results = []
+        for provision in MOCK_PROVISIONS[:limit]:
+            statute = next(
+                (s for s in MOCK_STATUTES if s["id"] == provision["statute_id"]),
+                None,
+            )
+            if statute:
+                results.append({
+                    "statute_id": statute["id"],
+                    "statute_title": statute["title"],
+                    "provision_article": provision["article_no"],
+                    "provision_content": provision["content_text"],
+                    "relation_type": "VECTOR_MATCH",
+                })
+        return results
+
+    def vector_search_ordinances(
+        self,
+        embedding: list[float],
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        # Mock: return first N ordinances regardless of embedding similarity.
+        return [
+            {
+                "ordinance_id": o["ordinance_id"],
+                "region_name": o["region_name"],
+                "title": o["title"],
+                "similarity_score": 0.9,
+                "relevance_reason": "벡터 유사도 기반 추천 (Mock)",
+            }
+            for o in MOCK_ORDINANCES[:limit]
+        ]
+
     def get_legal_conflicts(
         self,
         ordinance_id: str,

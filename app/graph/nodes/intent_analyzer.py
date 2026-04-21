@@ -27,7 +27,7 @@ class ExtractedInfo(BaseModel):
     )
 
 
-def intent_analyzer_node(
+async def intent_analyzer_node(
     state: OrdinanceBuilderState,
     llm: BaseChatModel,
 ) -> dict:
@@ -50,7 +50,7 @@ def intent_analyzer_node(
     ]
 
     logger.debug("[intent_analyzer] user_input=%r", state["user_input"])
-    extracted: ExtractedInfo = structured_llm.invoke(messages)
+    extracted: ExtractedInfo = await structured_llm.ainvoke(messages)
 
     # Merge: only overwrite fields that the LLM actually extracted (non-None)
     updated_info = dict(existing_info)

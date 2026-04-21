@@ -14,6 +14,7 @@ from app.api.schemas import (
     FinalizeRequest,
     FinalizeResponse,
     MessageRecord,
+    QADirectRequest,
     QARequest,
     QAResponse,
     QASource,
@@ -36,6 +37,7 @@ from app.db.session_store import (
 from app.graph.nodes._article_examples import find_article_examples
 from app.graph.workflow import get_db, get_graph
 from app.prompts.qa_agent import QA_SYSTEM, QAOutput, build_qa_human
+from app.services.qa_service import direct_search_qa
 
 logger = logging.getLogger(__name__)
 
@@ -524,4 +526,58 @@ async def qa_chat(
         sources=sources,
         applicable_content=result.applicable_content,
         applicable_article_key=result.applicable_article_key,
+    )
+
+
+@router.post("/qa", response_model=QAResponse)
+@limiter.limit("20/minute")
+async def qa_direct(
+    request: Request,
+    body: QADirectRequest,
+    user_id: str = Depends(get_current_user),
+):
+    """직접 검색 QA: 질문 임베딩 → Neo4j 전체 벡터 검색 → LLM 답변. 세션 독립적."""
+    db = get_db()
+
+    try:
+        result, legal_basis, legal_terms, similar_ordinances = await direct_search_qa(
+            question=body.question,
+            db=db,
+            llm=get_llm(settings.LLM_INTENT),
+        )
+    except Exception as exc:
+        logger.exception("직접 QA LLM 호출 실패")
+        raise HTTPException(status_code=500, detail="AI 답변 생성 중 오류가 발생했습니다.") from exc
+
+    sources: list[QASource] = []
+    for lb in legal_basis[:3]:
+        sources.append(QASource(
+            source_type="statute",
+            title=lb.get("statute_title", ""),
+            article_no=lb.get("provision_article", ""),
+            content=lb.get("provision_content", "")[:200],
+            relation_type=lb.get("relation_type", "VECTOR_MATCH"),
+        ))
+    for lt in legal_terms[:2]:
+        sources.append(QASource(
+            source_type="legal_term",
+            title=lt.get("source_statute", ""),
+            article_no=lt.get("term_name", ""),
+            content=lt.get("definition", "")[:200],
+            relation_type="DEFINES",
+        ))
+    for o in similar_ordinances[:2]:
+        sources.append(QASource(
+            source_type="ordinance",
+            title=o.get("title", ""),
+            article_no=o.get("region_name", ""),
+            content=o.get("relevance_reason", ""),
+            relation_type="VECTOR_MATCH",
+        ))
+
+    return QAResponse(
+        answer=result.answer,
+        sources=sources,
+        applicable_content=None,
+        applicable_article_key=None,
     )

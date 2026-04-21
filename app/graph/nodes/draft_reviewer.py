@@ -25,7 +25,7 @@ class ReviewDecision(BaseModel):
     )
 
 
-def draft_reviewer_node(
+async def draft_reviewer_node(
     state: OrdinanceBuilderState,
     llm: BaseChatModel,
 ) -> dict:
@@ -48,7 +48,7 @@ def draft_reviewer_node(
     # Step 1: Classify user intent (confirm vs revise)
     classifier_llm = llm.with_structured_output(ReviewDecision)
     logger.debug("[draft_reviewer] user_input=%r", user_input)
-    decision_result: ReviewDecision = classifier_llm.invoke([
+    decision_result: ReviewDecision = await classifier_llm.ainvoke([
         ("system", DRAFT_REVIEWER_SYSTEM),
         ("human", build_draft_reviewer_human(user_input, draft_full_text)),
     ])
@@ -67,7 +67,7 @@ def draft_reviewer_node(
     # Step 2 (revise): Apply changes using a second LLM call
     logger.debug("[draft_reviewer] revise 요청 — 수정 생성 시작")
     reviser_llm = llm.with_structured_output(OrdinanceDraft)
-    revised: OrdinanceDraft = reviser_llm.invoke([
+    revised: OrdinanceDraft = await reviser_llm.ainvoke([
         ("system", DRAFT_REVISION_SYSTEM),
         ("human", build_draft_revision_human(user_input, draft_full_text, draft_articles)),
     ])

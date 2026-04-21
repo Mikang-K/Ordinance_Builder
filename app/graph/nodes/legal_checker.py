@@ -34,7 +34,7 @@ class LegalCheckResult(BaseModel):
     overall_assessment: str = Field(description="조례 전체에 대한 종합 평가 (2~4문장)")
 
 
-def legal_checker_node(
+async def legal_checker_node(
     state: OrdinanceBuilderState,
     llm: BaseChatModel,
 ) -> dict:
@@ -56,7 +56,7 @@ def legal_checker_node(
 
     logger.debug("[legal_checker] draft_len=%d | legal_basis=%d건", len(draft), len(legal_basis))
     human_prompt = build_legal_checker_human(draft, legal_basis, legal_terms)
-    result: LegalCheckResult = structured_llm.invoke(
+    result: LegalCheckResult = await structured_llm.ainvoke(
         [("system", LEGAL_CHECKER_SYSTEM), ("human", human_prompt)]
     )
 
