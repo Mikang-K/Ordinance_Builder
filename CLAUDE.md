@@ -1183,5 +1183,35 @@ intent://<host>/<path>#Intent;scheme=https;package=com.android.chrome;end
 
 ---
 
+### 22. `signInWithRedirect` 무음 실패 — Chrome Bounce Tracking 차단 (2026-04-23)
+
+**증상**: 로그인 버튼 클릭 → Google 인증 → 앱으로 돌아옴 → 여전히 로그인 화면, 에러 없음.
+`getRedirectResult(auth)`가 오류 없이 `null`을 반환.
+
+**원인**: Chrome 120+의 **Bounce Tracking 방지** 기능.
+
+리다이렉트 경로가 도메인을 가로지르면 (`web.app → google.com → firebaseapp.com/__/auth → web.app`),
+Chrome이 중간 경유 도메인(`firebaseapp.com`)의 저장소를 삭제합니다.
+Firebase가 `firebaseapp.com`에 저장한 인증 결과가 사라지므로 `getRedirectResult`가 null을 반환.
+
+**해결** (`.env` 수정):
+```
+# 기존 (cross-origin 경유 → Bounce Tracking 차단됨)
+VITE_FIREBASE_AUTH_DOMAIN="ordinance-builder-b9f6c.firebaseapp.com"
+
+# 수정 (동일 도메인 내 처리 → 차단 없음)
+VITE_FIREBASE_AUTH_DOMAIN="ordinance-builder-b9f6c.web.app"
+```
+
+Firebase Hosting은 `/__/auth/**` 경로를 자동으로 처리하므로 별도 설정 불필요.
+리다이렉트 경로가 `web.app → google.com → web.app/__/auth → web.app`으로 단일 도메인 내에서 완결됨.
+
+**체크리스트**:
+- `VITE_FIREBASE_AUTH_DOMAIN`은 반드시 앱 호스팅 도메인(`*.web.app`)으로 설정할 것
+- `*.firebaseapp.com`을 authDomain으로 사용하면 Chrome 120+에서 로그인이 무음 실패함
+- 수정 후 반드시 재빌드 + Firebase Hosting 재배포
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.

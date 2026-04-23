@@ -17,9 +17,19 @@ export default function App() {
   // ── 인증 상태 ──────────────────────────────────────────────────────────────
   const [user, setUser] = useState<User | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
-    getRedirectResult(auth).catch((e) => console.error('redirect auth error:', e))
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) setUser(result.user)
+      })
+      .catch((e: unknown) => {
+        const code = (e as { code?: string }).code ?? 'unknown'
+        const msg = (e as { message?: string }).message ?? String(e)
+        console.error('redirect auth error:', e)
+        setAuthError(`로그인 실패 [${code}]: ${msg}`)
+      })
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser)
       setAuthLoading(false)
@@ -28,10 +38,14 @@ export default function App() {
   }, [])
 
   const handleLogin = async () => {
+    setAuthError(null)
     try {
       await loginWithGoogle()
-    } catch (e) {
+    } catch (e: unknown) {
+      const code = (e as { code?: string }).code ?? 'unknown'
+      const msg = (e as { message?: string }).message ?? String(e)
       console.error('로그인 실패:', e)
+      setAuthError(`로그인 시작 실패 [${code}]: ${msg}`)
     }
   }
 
@@ -317,10 +331,17 @@ export default function App() {
             지방 조례 초안 자동 생성 서비스
           </p>
           {inApp ? <InAppBrowserWarning /> : (
-            <button onClick={handleLogin} style={googleBtnStyle}>
-              <GoogleIcon />
-              Google 계정으로 로그인
-            </button>
+            <>
+              <button onClick={handleLogin} style={googleBtnStyle}>
+                <GoogleIcon />
+                Google 계정으로 로그인
+              </button>
+              {authError && (
+                <div style={{ marginTop: '16px', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', color: '#dc2626', fontSize: '0.82rem', wordBreak: 'break-all', textAlign: 'left' }}>
+                  {authError}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
