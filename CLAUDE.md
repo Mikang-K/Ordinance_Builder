@@ -1213,5 +1213,32 @@ Firebase Hosting은 `/__/auth/**` 경로를 자동으로 처리하므로 별도 
 
 ---
 
+### 23. Google OAuth — 테스트 모드에서 일부 계정만 로그인 가능 (2026-04-23)
+
+**증상**: 특정 계정(프로젝트 소유자)은 로그인되지만 다른 Google 계정은 "액세스 차단됨" 오류 발생.
+
+**원인**: Google Cloud Console의 OAuth 동의 화면이 **"테스트(Testing)"** 상태일 때:
+- 프로젝트 소유자 계정 → 항상 로그인 가능 (테스트 모드와 무관)
+- 명시적으로 등록된 테스트 사용자 → 로그인 가능
+- 그 외 모든 Google 계정 → "액세스 차단됨" 오류
+
+소유자 계정으로 로그인이 되면 앱 자체 문제가 아니라 OAuth 동의 화면 게시 여부 문제임을 즉시 의심할 것.
+
+**해결**:
+
+Google Cloud Console → **APIs & Services → OAuth consent screen** → **"PUBLISH APP"** 클릭
+
+게시 후 모든 Google 계정으로 로그인 가능. Firebase Auth + Google 로그인 용도는 추가 앱 검수 없이 즉시 게시됨.
+
+**체크리스트**:
+- 신규 GCP 프로젝트 생성 후 Firebase Google 로그인 설정 시 반드시 OAuth 동의 화면을 게시할 것
+- 로그인 문제 진단 순서:
+  1. 소유자 계정으로 로그인 시도 → 성공이면 → OAuth 테스트 모드 문제
+  2. 소유자 계정도 실패 → Firebase Auth 설정 또는 redirect_uri 문제 (§22 참조)
+
+**관련 설정 위치**: Google Cloud Console → APIs & Services → OAuth consent screen → Publishing status
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.
