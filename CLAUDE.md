@@ -1138,5 +1138,50 @@ async def intent_analyzer_node(...): extracted = await structured_llm.ainvoke(me
 
 ---
 
+### 21. Google 로그인 — 인앱 브라우저 차단 (`disallowed_useragent`) (2026-04-23)
+
+**증상**: 카카오톡·라인·네이버·인스타그램 등 앱에서 링크를 열고 Google 로그인 시도 시:
+
+```
+403 오류: disallowed_useragent
+액세스 차단됨: ordinance-builder의 요청이 Google 정책을 준수하지 않습니다
+```
+
+**원인**: Google OAuth는 WebView(인앱 브라우저)에서의 로그인을 보안 정책으로 전면 차단.
+`signInWithRedirect` vs `signInWithPopup` 선택과 무관하게, Google 서버가 User-Agent를 보고
+WebView 식별자(예: `wv`, `KAKAOTALK`, `Line/`, `NAVER`, `Instagram`, `FBAN` 등)를 감지하면
+인증 페이지 자체를 차단한다.
+
+**해결** (`frontend/src/App.tsx`):
+- `isInAppBrowser()` 함수로 User-Agent를 검사해 WebView 여부를 판별
+- `!user` 로그인 카드에서 WebView 감지 시 Google 로그인 버튼 대신 `InAppBrowserWarning` 컴포넌트 표시
+- Android: `intent://` scheme으로 Chrome 강제 실행 버튼 제공
+- iOS: Safari에서 열라는 안내 + 주소 복사 버튼 제공
+
+```typescript
+// App.tsx 하단 유틸리티 함수
+function isInAppBrowser(): boolean {
+  const ua = navigator.userAgent
+  return (
+    /wv/.test(ua) || /KAKAOTALK/i.test(ua) || /Line\//i.test(ua) ||
+    /NAVER/i.test(ua) || /Instagram/i.test(ua) || /FBAN|FBAV/i.test(ua) ||
+    /Twitter/i.test(ua) || /MicroMessenger/i.test(ua)
+  )
+}
+
+// !user 블록
+const inApp = isInAppBrowser()
+{inApp ? <InAppBrowserWarning /> : <button onClick={handleLogin}>Google 로그인</button>}
+```
+
+**Android Chrome 강제 실행 intent 형식**:
+```
+intent://<host>/<path>#Intent;scheme=https;package=com.android.chrome;end
+```
+
+**체크리스트**: Google 로그인 버튼을 새로 추가하는 곳에서는 반드시 `isInAppBrowser()` 체크를 선행할 것.
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.

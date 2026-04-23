@@ -306,6 +306,7 @@ export default function App() {
   }
 
   if (!user) {
+    const inApp = isInAppBrowser()
     return (
       <div style={loginPageStyle}>
         <div style={loginCardStyle}>
@@ -315,10 +316,12 @@ export default function App() {
           <p style={{ margin: '0 0 32px', color: '#64748b', fontSize: '0.95rem' }}>
             지방 조례 초안 자동 생성 서비스
           </p>
-          <button onClick={handleLogin} style={googleBtnStyle}>
-            <GoogleIcon />
-            Google 계정으로 로그인
-          </button>
+          {inApp ? <InAppBrowserWarning /> : (
+            <button onClick={handleLogin} style={googleBtnStyle}>
+              <GoogleIcon />
+              Google 계정으로 로그인
+            </button>
+          )}
         </div>
       </div>
     )
@@ -550,6 +553,74 @@ const avatarStyle: React.CSSProperties = {
   height: '28px',
   borderRadius: '50%',
   border: '2px solid rgba(255,255,255,0.6)',
+}
+
+// ── 인앱 브라우저 감지 ────────────────────────────────────────────────────
+// Google OAuth는 WebView/인앱 브라우저에서 disallowed_useragent(403)를 반환한다.
+// (카카오톡·라인·네이버·인스타그램 등 앱 내 링크 열기 시 발생)
+function isInAppBrowser(): boolean {
+  const ua = navigator.userAgent
+  return (
+    /wv/.test(ua) ||             // Android WebView (chrome custom tab 아닌 경우)
+    /KAKAOTALK/i.test(ua) ||
+    /Line\//i.test(ua) ||
+    /NAVER/i.test(ua) ||
+    /Instagram/i.test(ua) ||
+    /FBAN|FBAV/i.test(ua) ||     // Facebook
+    /Twitter/i.test(ua) ||
+    /MicroMessenger/i.test(ua)   // WeChat
+  )
+}
+
+function InAppBrowserWarning() {
+  const url = window.location.href
+  const isAndroid = /Android/i.test(navigator.userAgent)
+
+  const handleOpenChrome = () => {
+    // Android intent scheme으로 Chrome 강제 실행
+    window.location.href =
+      `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`
+  }
+
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(url).catch(() => {})
+  }
+
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontSize: '2.2rem', marginBottom: '12px' }}>⚠️</div>
+      <p style={{ fontWeight: 700, fontSize: '1rem', color: '#111827', margin: '0 0 8px' }}>
+        앱 내 브라우저에서는 Google 로그인이 차단됩니다
+      </p>
+      <p style={{ fontSize: '0.82rem', color: '#6b7280', margin: '0 0 24px', lineHeight: '1.7' }}>
+        카카오톡·라인 등 앱에서 링크를 열면<br />
+        Google 보안 정책으로 로그인이 거부됩니다.<br />
+        <strong>Chrome 또는 Safari</strong>에서 직접 열어주세요.
+      </p>
+      {isAndroid ? (
+        <button
+          onClick={handleOpenChrome}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: '#1967d2', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', marginBottom: '12px' }}
+        >
+          Chrome으로 열기
+        </button>
+      ) : (
+        <p style={{ fontSize: '0.875rem', color: '#374151', fontWeight: 600, marginBottom: '12px' }}>
+          Safari 브라우저에서 직접 접속해 주세요
+        </p>
+      )}
+      <br />
+      <button
+        onClick={handleCopyUrl}
+        style={{ padding: '8px 16px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8rem', color: '#4b5563', cursor: 'pointer' }}
+      >
+        주소 복사
+      </button>
+      <p style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '10px', wordBreak: 'break-all' }}>
+        {url}
+      </p>
+    </div>
+  )
 }
 
 // ── Google 아이콘 SVG ──────────────────────────────────────────────────────
