@@ -21,6 +21,10 @@ class ExtractedInfo(BaseModel):
     budget_range: Optional[str] = Field(None, description="예산 규모. 예: '연간 5억 이내'")
     industry_sector: Optional[str] = Field(None, description="관련 산업 분야. 예: 'IT/소프트웨어', '농업'")
     enforcement_scope: Optional[str] = Field(None, description="시행 범위 또는 기간")
+    ordinance_type: Optional[str] = Field(
+        None,
+        description="조례 유형. '지원', '설치·운영', '관리·규제', '복지·서비스' 중 하나. 명시적으로 언급된 경우만 추출.",
+    )
     missing_fields: list[str] = Field(
         default_factory=list,
         description="조례 작성에 필수적이나 아직 언급되지 않은 필드명 목록",
@@ -62,16 +66,22 @@ async def intent_analyzer_node(
         if new_val is not None:
             updated_info[field] = new_val
 
+    # Merge ordinance_type: prefer newly extracted, fall back to existing state value
+    extracted_type = getattr(extracted, "ordinance_type", None)
+    new_ordinance_type = extracted_type or state.get("ordinance_type")
+
     # Recalculate missing fields based on actual values (LLM hint is advisory only)
     missing = [f for f in REQUIRED_FIELDS if not updated_info.get(f)]
 
     logger.info(
-        "[intent_analyzer] extracted=%s | missing=%s",
+        "[intent_analyzer] extracted=%s | ordinance_type=%s | missing=%s",
         {k: v for k, v in updated_info.items() if v},
+        new_ordinance_type,
         missing,
     )
     return {
         "ordinance_info": updated_info,
+        "ordinance_type": new_ordinance_type,
         "missing_fields": missing,
         "current_stage": "intent_analysis",
         "messages": [HumanMessage(content=state["user_input"])],

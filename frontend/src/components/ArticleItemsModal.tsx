@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { SimilarOrdinance } from '../types'
+import { ARTICLE_STRUCTURED_OPTIONS, formatSelectionAsText } from '../constants/interviewOptions'
 
 interface Props {
   articles: string[]
@@ -73,6 +74,7 @@ export default function ArticleItemsModal({
   // values: null means "AI default". string means "User Input". undefined means "not evaluated yet".
   const [values, setValues] = useState<Record<string, string | null>>({})
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [structuredSelections, setStructuredSelections] = useState<Record<string, Record<string, string | string[]>>>({})
 
   // Specifically for the "정의" article
   const [definitions, setDefinitions] = useState<{ term: string; desc: string }[]>([{ term: '', desc: '' }])
@@ -83,11 +85,14 @@ export default function ArticleItemsModal({
       initial[key] = '' // empty by default
     })
     setValues(initial)
+    setStructuredSelections({})
+    setCurrentIndex(0)
+    setDefinitions([{ term: '', desc: '' }])
   }, [articles])
 
-  // Sync definitions back to values['정의']
+  // Sync definitions back to values['정의'] — only reacts to definitions changes, not navigation
   useEffect(() => {
-    if (articles[currentIndex] !== '정의') return
+    if (!('정의' in values)) return
     if (definitions.length === 1 && !definitions[0].term.trim() && !definitions[0].desc.trim()) {
       setValues((prev) => ({ ...prev, '정의': prev['정의'] === null ? null : '' }))
     } else {
@@ -100,25 +105,27 @@ export default function ArticleItemsModal({
         return { ...prev, '정의': compiled }
       })
     }
-  }, [definitions, currentIndex, articles])
+  }, [definitions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pre-fill from QA panel "apply" action
   useEffect(() => {
     if (!pendingQAContent) return
     const currentKey = articles[currentIndex]
-    if (!currentKey || currentKey === '정의') return
+    if (!currentKey || currentKey === '정의') {
+      onQAContentApplied?.()
+      return
+    }
     if (window.confirm(`Q&A 답변 내용을 '${currentKey}' 조항에 적용하시겠습니까?\n\n기존 입력 내용이 대체됩니다.`)) {
       setValues((prev) => ({ ...prev, [currentKey]: pendingQAContent }))
     }
     onQAContentApplied?.()
-  }, [pendingQAContent]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pendingQAContent, currentIndex, articles, onQAContentApplied])
 
   const handleAllDefaults = () => {
     if (window.confirm("입력하지 않은 나머지 모든 항목을 '기본값(AI 자동 작성)'으로 넘기고 조례 초안을 생성하시겠습니까?")) {
       const submitData: Record<string, string | null> = {}
       articles.forEach((key) => {
-        const val = values[key]
-        submitData[key] = (val === '' || val === undefined) ? null : val
+        submitData[key] = buildSubmitValue(key)
       })
       onSubmit(submitData)
     }
@@ -126,6 +133,7 @@ export default function ArticleItemsModal({
 
   const handleSetDefault = (key: string) => {
     setValues((prev) => ({ ...prev, [key]: null }))
+    setStructuredSelections((prev) => { const next = { ...prev }; delete next[key]; return next })
   }
 
   const handleChange = (key: string, val: string) => {
@@ -153,8 +161,7 @@ export default function ArticleItemsModal({
   const handleSubmit = () => {
     const submitData: Record<string, string | null> = {}
     articles.forEach((key) => {
-      const val = values[key]
-      submitData[key] = (val === '' || val === undefined) ? null : val
+      submitData[key] = buildSubmitValue(key)
     })
     onSubmit(submitData)
   }
@@ -168,14 +175,39 @@ export default function ArticleItemsModal({
   }
 
   const handleDefinitionChange = (index: number, field: 'term' | 'desc', val: string) => {
-    const newDefs = [...definitions]
-    newDefs[index][field] = val
+    const newDefs = definitions.map((d, i) => i === index ? { ...d, [field]: val } : d)
     setDefinitions(newDefs)
   }
 
   const handleRestoreDefinitionManual = () => {
     handleChange('정의', '')
     setDefinitions([{ term: '', desc: '' }])
+  }
+
+  const handleStructuredSelect = (articleKey: string, field: string, value: string, type: 'single' | 'multi') => {
+    setStructuredSelections(prev => {
+      const articleSels = prev[articleKey] || {}
+      if (type === 'single') {
+        const next = articleSels[field] === value ? '' : value
+        return { ...prev, [articleKey]: { ...articleSels, [field]: next } }
+      } else {
+        const current = (articleSels[field] as string[]) || []
+        const next = current.includes(value)
+          ? current.filter(v => v !== value)
+          : [...current, value]
+        return { ...prev, [articleKey]: { ...articleSels, [field]: next } }
+      }
+    })
+  }
+
+  const buildSubmitValue = (key: string): string | null => {
+    const textVal = values[key]
+    if (textVal === null) return null
+    const sels = structuredSelections[key]
+    const structuredText = sels ? formatSelectionAsText(sels) : ''
+    const parts = [structuredText, textVal].filter(s => s && s.trim())
+    const combined = parts.join('\n')
+    return combined || null
   }
 
   if (articles.length === 0) return null
@@ -332,7 +364,9 @@ export default function ArticleItemsModal({
                     {guide?.title || currentKey}
                   </h3>
                   <p style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                    직접 입력하거나 AI 기본값을 사용할 수 있습니다.
+                    {ARTICLE_STRUCTURED_OPTIONS[currentKey]
+                      ? '빠른 선택 또는 직접 입력 · AI 기본값을 사용할 수 있습니다.'
+                      : '직접 입력하거나 AI 기본값을 사용할 수 있습니다.'}
                   </p>
                 </div>
                 {!isDefault ? (
@@ -353,12 +387,47 @@ export default function ArticleItemsModal({
               {isDefault ? (
                 <div 
                   style={{ padding: '30px 20px', color: '#64748b', fontSize: '1.05rem', background: '#f8fafc', borderRadius: '8px', cursor: 'pointer', textAlign: 'center', border: '2px dashed #cbd5e1', transition: 'all 0.2s' }} 
-                  onClick={currentKey === '정의' ? handleRestoreDefinitionManual : () => handleChange(currentKey, '')}
+                  onClick={() => handleChange(currentKey, '')}
                 >
                   <p style={{ marginBottom: '8px' }}>현재 <strong>기본값(AI 자동 생성)</strong>이 선택되어 있습니다.</p>
                   <p style={{ fontSize: '0.9rem', color: '#94a3b8' }}>마우스로 클릭하여 ✏️ 직접 내용을 입력할 수 있습니다.</p>
                 </div>
-              ) : currentKey === '정의' ? (
+              ) : (
+                <>
+                  {ARTICLE_STRUCTURED_OPTIONS[currentKey] && (
+                    <div className="structured-input-panel" style={{ marginBottom: '16px' }}>
+                      <p style={{ fontSize: '0.82rem', color: '#475569', marginBottom: '12px', fontWeight: 600 }}>
+                        ✅ 빠른 선택 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(아래 텍스트 입력과 함께 제출됩니다)</span>
+                      </p>
+                      {Object.entries(ARTICLE_STRUCTURED_OPTIONS[currentKey]).map(([field, config]) => {
+                        const sels = structuredSelections[currentKey] || {}
+                        const current = sels[field]
+                        return (
+                          <div key={field} style={{ marginBottom: '14px' }}>
+                            <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '8px', fontWeight: 600 }}>{config.label}</p>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                              {config.options.map(opt => {
+                                const isSelected = config.type === 'single'
+                                  ? current === opt
+                                  : Array.isArray(current) && current.includes(opt)
+                                return (
+                                  <button
+                                    key={opt}
+                                    className={`option-chip${isSelected ? ' selected' : ''}`}
+                                    onClick={() => handleStructuredSelect(currentKey, field, opt, config.type)}
+                                    disabled={isLoading}
+                                  >
+                                    {opt}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {currentKey === '정의' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {definitions.map((def, idx) => (
                     <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -404,6 +473,8 @@ export default function ArticleItemsModal({
                   placeholder={`${currentKey} 조항에 들어갈 내용이나 주요 키워드를 자유롭게 입력하세요.\n개행을 활용해 세부 항목을 나눌 수 있습니다.`}
                   disabled={isLoading}
                 />
+              )}
+                </>
               )}
             </div>
 

@@ -45,12 +45,15 @@ async def drafting_agent_node(
     similar: list[dict] = state.get("similar_ordinances") or []
     article_contents: dict = state.get("article_contents") or {}
     legal_terms: list[dict] = state.get("legal_terms") or []
+    ordinance_type: str | None = state.get("ordinance_type")
 
     logger.debug(
-        "[drafting_agent] info=%s | legal_basis=%d건 | similar=%d건 | articles=%d건",
-        info, len(legal_basis), len(similar), len(article_contents),
+        "[drafting_agent] info=%s | ordinance_type=%s | legal_basis=%d건 | similar=%d건 | articles=%d건",
+        info, ordinance_type, len(legal_basis), len(similar), len(article_contents),
     )
-    human_prompt = build_drafting_human(info, legal_basis, similar, article_contents, legal_terms)
+    human_prompt = build_drafting_human(
+        info, legal_basis, similar, article_contents, legal_terms, ordinance_type
+    )
     result: OrdinanceDraft = await structured_llm.ainvoke(
         [("system", DRAFTING_SYSTEM), ("human", human_prompt)]
     )

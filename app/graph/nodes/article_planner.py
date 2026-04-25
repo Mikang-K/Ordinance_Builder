@@ -5,6 +5,7 @@ from app.graph.state import OrdinanceBuilderState
 
 # Per-article question templates
 ARTICLE_TEMPLATES: dict[str, dict] = {
+    # ── 지원 조례 (기존) ─────────────────────────────────────────────────────
     "목적": {
         "title": "목적 조항 (제1조)",
         "question": (
@@ -89,13 +90,169 @@ ARTICLE_TEMPLATES: dict[str, dict] = {
             "  건너뛰려면 **'기본값'** 이라고 입력하세요."
         ),
     },
+    # ── 설치·운영 조례 (신규) ─────────────────────────────────────────────────
+    "설치": {
+        "title": "설치 조항",
+        "question": (
+            "위원회·자문단·심의회의 **설치 근거와 명칭**을 작성해 주세요.\n\n"
+            "  • 기관 명칭 (예: '○○청년정책위원회')\n"
+            "  • 설치 목적 및 소속\n\n"
+            "  예시: '청년 정책의 심의·자문을 위하여 시장 소속으로 ○○청년정책위원회를 둔다.'\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    "구성": {
+        "title": "구성 조항",
+        "question": (
+            "위원회의 **구성 및 위원 자격**을 작성해 주세요.\n\n"
+            "  • 위원 정수 (예: 위원장 포함 9명 이내)\n"
+            "  • 위원 임기 (예: 2년, 1회 연임 가능)\n"
+            "  • 위원 자격 (전문가, 공무원, 주민 대표 등)\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    "직무": {
+        "title": "직무 조항",
+        "question": (
+            "위원장 및 위원의 **직무와 권한**을 작성해 주세요.\n\n"
+            "  • 위원장 역할 (회의 소집·주재 등)\n"
+            "  • 심의·의결 사항 목록\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    "운영": {
+        "title": "운영 조항",
+        "question": (
+            "위원회의 **운영 방식**을 작성해 주세요.\n\n"
+            "  • 정기회의 주기 (예: 반기 1회)\n"
+            "  • 임시회의 소집 요건\n"
+            "  • 의결 정족수 (예: 재적 과반수 출석, 출석 과반수 의결)\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    "간사": {
+        "title": "간사 조항",
+        "question": (
+            "위원회 사무를 처리할 **간사**에 대해 작성해 주세요.\n\n"
+            "  • 간사 지정 방법 (예: 담당 부서 소속 공무원 중 위원장이 지정)\n"
+            "  • 간사의 역할 (회의록 작성, 자료 준비 등)\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    # ── 관리·규제 조례 (신규) ─────────────────────────────────────────────────
+    "적용범위": {
+        "title": "적용 범위 조항",
+        "question": (
+            "이 조례의 **적용 대상과 범위**를 작성해 주세요.\n\n"
+            "  • 적용되는 시설·장소·행위의 범위\n"
+            "  • 적용 제외 사항 (해당 시)\n\n"
+            "  예시: '이 조례는 ○○시가 설치·운영하는 공공체육시설에 적용한다.'\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    "관리책임": {
+        "title": "관리 책임 조항",
+        "question": (
+            "시설·대상의 **관리 주체와 책임**을 작성해 주세요.\n\n"
+            "  • 관리 주체 (시장, 위탁 기관 등)\n"
+            "  • 위탁 관리 시 위탁 절차\n"
+            "  • 관리 기본 원칙\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    "사용허가": {
+        "title": "사용 허가 조항",
+        "question": (
+            "시설 사용 **허가 절차 및 조건**을 작성해 주세요.\n\n"
+            "  • 허가 신청 방법 및 제출 서류\n"
+            "  • 허가 기간 및 갱신 가능 여부\n"
+            "  • 허가 취소·제한 사유\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    "사용료": {
+        "title": "사용료 조항",
+        "question": (
+            "시설 **사용료 산정 기준과 징수 방법**을 작성해 주세요.\n\n"
+            "  • 요금 기준 (시간제, 일제, 월제 등)\n"
+            "  • 감면 대상 및 감면율\n"
+            "  • 사용료 반환 조건\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    "위반제재": {
+        "title": "위반 및 제재 조항",
+        "question": (
+            "위반 행위에 대한 **제재 기준**을 작성해 주세요.\n\n"
+            "  • 과태료 상한액 (예: 100만원 이하)\n"
+            "  • 허가 취소·사용 제한 사유\n"
+            "  • 원상복구 명령 등 행정 조치\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    # ── 복지·서비스 조례 (신규) ───────────────────────────────────────────────
+    "서비스내용": {
+        "title": "서비스 내용 조항",
+        "question": (
+            "제공할 **복지 서비스의 내용**을 구체적으로 작성해 주세요.\n\n"
+            "  • 서비스 종류 (방문 돌봄, 의료비 지원, 식사 제공 등)\n"
+            "  • 서비스 제공 기준 및 횟수\n\n"
+            "  예시: '주 3회 이상 방문 돌봄 서비스 및 월 10만원 이내 의료비 지원'\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    "제공기관": {
+        "title": "서비스 제공 기관 조항",
+        "question": (
+            "서비스를 **제공하는 기관과 지정 절차**를 작성해 주세요.\n\n"
+            "  • 제공 기관 유형 (공공기관, 민간 위탁 기관 등)\n"
+            "  • 지정·위탁 기준 및 절차\n"
+            "  • 지도·감독 방법\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    "신청접수": {
+        "title": "신청 및 접수 조항",
+        "question": (
+            "서비스 **신청 및 접수 절차**를 작성해 주세요.\n\n"
+            "  • 신청 자격 확인 방법\n"
+            "  • 접수 채널 (방문, 온라인, 전화 등)\n"
+            "  • 신청 서류 목록\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
+    "비용": {
+        "title": "비용 및 본인부담 조항",
+        "question": (
+            "서비스 **이용 비용과 본인부담 기준**을 작성해 주세요.\n\n"
+            "  • 무료 제공 여부 또는 본인부담 방식 (정액, 소득 연동 등)\n"
+            "  • 감면 대상 (기초생활수급자, 장애인 등)\n\n"
+            "  건너뛰려면 **'기본값'** 이라고 입력하세요."
+        ),
+    },
 }
 
-# Default article order used for most support-type ordinances
+# Default article order used for support-type ordinances
 DEFAULT_ARTICLE_ORDER = [
     "목적", "정의", "지원대상", "지원내용",
     "지원금액", "신청방법", "심사선정", "환수제재", "위임",
 ]
+
+# Article order for non-support ordinance types
+TYPE_ARTICLE_ORDER: dict[str, list[str]] = {
+    "설치·운영": ["목적", "정의", "설치", "구성", "직무", "운영", "간사", "위임"],
+    "관리·규제": ["목적", "정의", "적용범위", "관리책임", "사용허가", "사용료", "위반제재", "위임"],
+    "복지·서비스": ["목적", "정의", "지원대상", "서비스내용", "제공기관", "신청접수", "비용", "위임"],
+}
+
+
+def _legacy_order(support_type: str) -> list[str]:
+    """Return article order based on support_type keywords (backward compat)."""
+    if support_type and any(kw in support_type for kw in ["컨설팅", "교육", "멘토링", "상담"]):
+        return ["목적", "정의", "지원대상", "지원내용", "신청방법", "위임"]
+    if support_type and "시설" in support_type:
+        return ["목적", "정의", "지원대상", "지원내용", "신청방법", "심사선정", "환수제재", "위임"]
+    return list(DEFAULT_ARTICLE_ORDER)
 
 
 def article_planner_node(state: OrdinanceBuilderState) -> dict:
@@ -113,14 +270,13 @@ def article_planner_node(state: OrdinanceBuilderState) -> dict:
     support_type: str = ordinance_info.get("support_type", "")
     region: str = ordinance_info.get("region", "해당 지역")
     purpose: str = ordinance_info.get("purpose", "")
+    ordinance_type: str = state.get("ordinance_type") or ""
 
-    # Tailor the article list to the support type
-    if support_type and any(kw in support_type for kw in ["컨설팅", "교육", "멘토링", "상담"]):
-        article_order = ["목적", "정의", "지원대상", "지원내용", "신청방법", "위임"]
-    elif support_type and "시설" in support_type:
-        article_order = ["목적", "정의", "지원대상", "지원내용", "신청방법", "심사선정", "환수제재", "위임"]
+    # Tailor the article list to the ordinance type (new) or support type (legacy)
+    if ordinance_type and ordinance_type in TYPE_ARTICLE_ORDER:
+        article_order = list(TYPE_ARTICLE_ORDER[ordinance_type])
     else:
-        article_order = list(DEFAULT_ARTICLE_ORDER)
+        article_order = _legacy_order(support_type)
 
     first_key = article_order[0]
     remaining = article_order[1:]

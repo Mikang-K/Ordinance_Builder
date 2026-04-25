@@ -5,9 +5,10 @@ import MessageBubble from './MessageBubble'
 interface Props {
   messages: ChatMessage[]
   isLoading: boolean
+  onOptionSelect?: (value: string) => void
 }
 
-export default function ChatWindow({ messages, isLoading }: Props) {
+export default function ChatWindow({ messages, isLoading, onOptionSelect }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -23,7 +24,12 @@ export default function ChatWindow({ messages, isLoading }: Props) {
         </div>
       )}
       {messages.map((msg, i) => (
-        <MessageBubble key={i} message={msg} />
+        <MessageBubble
+          key={i}
+          message={msg}
+          onOptionSelect={onOptionSelect}
+          isLastMessage={i === messages.length - 1}
+        />
       ))}
       {isLoading && (
         <div className="message-row ai">

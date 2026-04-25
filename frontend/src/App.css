@@ -1065,3 +1065,93 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   .session-resume-btn { flex: 1; text-align: center; }
   .session-delete-btn { flex-shrink: 0; }
 }
+
+/* ── 채팅 선택지 칩 ──────────────────────────────────────── */
+.suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding-left: 2px;
+}
+
+.suggestion-chip {
+  padding: 6px 14px;
+  border: 1.5px solid #0f766e;
+  border-radius: 20px;
+  background: #f0fdfa;
+  color: #0f766e;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  white-space: nowrap;
+  min-height: 36px;
+  line-height: 1.4;
+}
+
+.suggestion-chip:hover {
+  background: #0f766e;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.suggestion-chip:active {
+  transform: translateY(0);
+}
+
+/* ── 조항 모달 구조화 선택 UI ──────────────────────────────── */
+.structured-input-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.structured-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.structured-field-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: 0.02em;
+}
+
+.option-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.option-chip {
+  padding: 5px 12px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 16px;
+  background: white;
+  color: #475569;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  white-space: nowrap;
+  min-height: 32px;
+}
+
+.option-chip:hover {
+  border-color: #0f766e;
+  color: #0f766e;
+}
+
+.option-chip.selected {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: white;
+  font-weight: 600;
+}

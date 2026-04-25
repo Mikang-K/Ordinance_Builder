@@ -11,6 +11,11 @@ export type Stage =
   | 'completed'
   | 'error'
 
+export interface SuggestedOption {
+  label: string
+  value: string
+}
+
 export interface SimilarOrdinance {
   ordinance_id: string
   region_name: string
@@ -30,6 +35,7 @@ export interface LegalIssue {
 export interface ChatMessage {
   role: 'user' | 'ai'
   text: string
+  suggested_options?: SuggestedOption[]
 }
 
 export interface SessionCreateResponse {
@@ -39,6 +45,8 @@ export interface SessionCreateResponse {
   article_queue?: string[]
   current_article_key?: string | null
   similar_ordinances?: SimilarOrdinance[]
+  suggested_options?: SuggestedOption[]
+  ordinance_type?: string | null
 }
 
 export interface ChatResponse {
@@ -52,6 +60,8 @@ export interface ChatResponse {
   similar_ordinances?: SimilarOrdinance[]
   article_queue?: string[]
   current_article_key?: string | null
+  suggested_options?: SuggestedOption[]
+  ordinance_type?: string | null
 }
 
 export interface FinalizeResponse {
@@ -80,6 +90,7 @@ export interface SessionStateResponse {
   ordinance_info: Record<string, string>
   article_queue?: string[] | null
   current_article_key?: string | null
+  ordinance_type?: string | null
 }
 
 export interface QASource {

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import type { ChatMessage, LegalIssue, QAMessage, SimilarOrdinance, Stage } from './types'
+import type { ChatMessage, LegalIssue, QAMessage, SimilarOrdinance, Stage, SuggestedOption } from './types'
 import { createSession, sendMessage, finalizeSession, getSessionState, submitArticlesBatch } from './api'
 import { auth, loginWithGoogle, logout, onAuthStateChanged, getRedirectResult } from './firebase'
 import type { User } from './firebase'
@@ -12,6 +12,7 @@ import ArticleItemsModal from './components/ArticleItemsModal'
 import LoadingModal from './components/LoadingModal'
 import CompletedDraftModal from './components/CompletedDraftModal'
 import QAPanel from './components/QAPanel'
+import OnboardingWizard from './components/OnboardingWizard'
 
 export default function App() {
   // ── 인증 상태 ──────────────────────────────────────────────────────────────
@@ -87,6 +88,7 @@ export default function App() {
   const [qaHistory, setQaHistory] = useState<QAMessage[]>([])
   const [pendingQAContent, setPendingQAContent] = useState<string | null>(null)
   const [hasSession, setHasSession] = useState(false)
+  const [ordinanceType, setOrdinanceType] = useState<string | null>(null)
 
   const sessionIdRef = useRef<string | null>(null)
   const [fontSize, setFontSize] = useState<number>(16)
@@ -108,9 +110,11 @@ export default function App() {
     similar_ordinances?: SimilarOrdinance[]
     article_queue?: string[]
     current_article_key?: string | null
+    suggested_options?: SuggestedOption[]
+    ordinance_type?: string | null
   }) => {
     setStage(res.stage as Stage)
-    appendMessage({ role: 'ai', text: res.message })
+    appendMessage({ role: 'ai', text: res.message, suggested_options: res.suggested_options })
 
     if (res.similar_ordinances && res.similar_ordinances.length > 0) {
       setSimilarOrdinances(res.similar_ordinances)
@@ -118,7 +122,7 @@ export default function App() {
 
     if (res.article_queue != null) setArticleQueue(res.article_queue)
     if (res.current_article_key !== undefined) setCurrentArticleKey(res.current_article_key)
-
+    if (res.ordinance_type != null) setOrdinanceType(res.ordinance_type)
 
     // Draft just generated → open the editor modal
     if (res.stage === 'draft_review' && res.draft) {
@@ -145,16 +149,12 @@ export default function App() {
     }
   }
 
-  const handleSend = async () => {
-    const text = input.trim()
-    if (!text || isLoading) return
-
-    setInput('')
+  const sendText = async (text: string) => {
+    if (!text.trim() || isLoading) return
     setError(null)
     appendMessage({ role: 'user', text })
     setIsLoading(true)
     setLoadingMessage(sessionIdRef.current ? 'AI가 응답을 준비 중입니다...' : '기본 정보를 분석하고 있습니다...')
-
     try {
       if (!sessionIdRef.current) {
         const res = await createSession(text)
@@ -171,6 +171,19 @@ export default function App() {
       setIsLoading(false)
       setLoadingMessage(null)
     }
+  }
+
+  const handleSend = async () => {
+    const text = input.trim()
+    if (!text) return
+    setInput('')
+    await sendText(text)
+  }
+
+  const handleOptionSelect = (value: string) => {
+    if (isLoading || isArticleModalOpen) return
+    setInput('')
+    sendText(value)
   }
 
   const handleLegalReview = async (editedDraft: string) => {
@@ -241,6 +254,7 @@ export default function App() {
     setQaHistory([])
     setPendingQAContent(null)
     setHasSession(false)
+    setOrdinanceType(null)
     setError(null)
     setInput('')
   }
@@ -270,6 +284,7 @@ export default function App() {
       }
       if (state.article_queue != null) setArticleQueue(state.article_queue)
       if (state.current_article_key !== undefined) setCurrentArticleKey(state.current_article_key)
+      if (state.ordinance_type != null) setOrdinanceType(state.ordinance_type)
 
       if (state.stage === 'completed') {
         if (state.draft) setCompletedDraft(state.draft)
@@ -381,6 +396,20 @@ export default function App() {
           </div>
         </div>
         <StageIndicator stage={stage} />
+        {ordinanceType && (
+          <span style={{
+            padding: '3px 10px',
+            background: 'rgba(255,255,255,0.15)',
+            border: '1px solid rgba(255,255,255,0.3)',
+            borderRadius: '12px',
+            fontSize: '0.78rem',
+            fontWeight: 600,
+            color: '#ffffff',
+            whiteSpace: 'nowrap',
+          }}>
+            {ordinanceType} 조례
+          </span>
+        )}
         <div className="header-actions">
           {isArticleModalOpen && hideArticleModal && (
             <button className="open-draft-btn" onClick={() => setHideArticleModal(false)}>
@@ -423,7 +452,11 @@ export default function App() {
 
       <main className="app-main">
         <div className="chat-area">
-          <ChatWindow messages={messages} isLoading={isLoading} />
+          {messages.length === 0 && !isLoading && !hasSession ? (
+            <OnboardingWizard onStart={sendText} isLoading={isLoading} />
+          ) : (
+          <ChatWindow messages={messages} isLoading={isLoading} onOptionSelect={handleOptionSelect} />
+          )}
 
           {similarOrdinances.length > 0 && (
             <SimilarOrdinancesPanel ordinances={similarOrdinances} />
@@ -436,9 +469,9 @@ export default function App() {
             </div>
           )}
 
-          {isArticleModalOpen && hideArticleModal ? (
+          {!hasSession && messages.length === 0 && !isLoading ? null : isArticleModalOpen && hideArticleModal ? (
             <div className="input-area" style={{ justifyContent: 'center', background: '#f8fafc', padding: '20px' }}>
-              <button 
+              <button
                 onClick={() => setHideArticleModal(false)}
                 style={{ padding: '14px 28px', background: '#1e40af', color: 'white', borderRadius: '12px', fontSize: '1rem', fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(30, 64, 175, 0.3)', transition: 'transform 0.1s' }}
                 onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}

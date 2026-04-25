@@ -32,6 +32,7 @@ def build_drafting_human(
     similar: list,
     article_contents: dict | None = None,
     legal_terms: list | None = None,
+    ordinance_type: str | None = None,
 ) -> str:
     legal_refs = "\n".join(
         f"  [{b['statute_title']}] {b['provision_article']}: {b['provision_content']}"
@@ -67,10 +68,36 @@ def build_drafting_human(
         terms_section = "\n\n## 주요 법령용어 정의 (제2조 작성 시 반영)\n" + "\n".join(lines)
 
     user_instruction = (
-        "사용자가 직접 입력한 조항은 내용을 최대한 유지하면서 법적 문장으로 다듬어 주세요."
+        "사용자가 직접 입력한 조항은 내용을 최대한 유지하면서 법적 문장으로 다듬어 주세요.\n"
+        "일부 조항 내용은 '지원 한도: 500만원 | 지원 기간: 2년 | 지원 비율: 70% 이내'처럼 "
+        "'키: 값 | 키: 값' 형식의 구조화 텍스트를 포함할 수 있습니다. "
+        "이 경우 해당 값을 그대로 반영하여 법적 문장으로 변환하세요."
         if article_contents
         else "위 정보를 바탕으로 완성도 높은 조례 초안을 작성하세요."
     )
+
+    type_hint = ""
+    if ordinance_type and ordinance_type != "지원":
+        type_hints = {
+            "설치·운영": (
+                "이 조례는 **설치·운영 조례**입니다. 위원회·자문단·심의회의 설치 근거, "
+                "구성·직무·운영·간사 조항을 중심으로 작성하세요. "
+                "보조금·지원금 조항은 포함하지 않습니다."
+            ),
+            "관리·규제": (
+                "이 조례는 **관리·규제 조례**입니다. 시설 사용허가, 사용료 징수, "
+                "위반 행위에 대한 과태료·행정제재를 중심으로 작성하세요. "
+                "지원금 지급 조항은 포함하지 않습니다."
+            ),
+            "복지·서비스": (
+                "이 조례는 **복지·서비스 조례**입니다. 서비스 제공 내용, 제공 기관 지정, "
+                "신청·접수 절차, 본인부담 기준을 중심으로 작성하세요. "
+                "보조금 직접 지급이 아닌 서비스 제공 방식으로 작성하세요."
+            ),
+        }
+        hint_text = type_hints.get(ordinance_type, "")
+        if hint_text:
+            type_hint = f"\n\n## 조례 유형 참고\n  {hint_text}"
 
     return f"""
 다음 정보를 바탕으로 조례 초안을 작성하세요.
@@ -88,7 +115,7 @@ def build_drafting_human(
 {legal_refs}
 
 ## 참고 유사 조례
-{similar_refs}{terms_section}
+{similar_refs}{terms_section}{type_hint}
 
 {user_instruction}
 최소 8개 이상의 조문을 포함하고, 각 조문은 법적 효력이 있는 완전한 문장으로 작성하세요.

@@ -22,6 +22,7 @@ from app.api.schemas import (
     SessionCreateResponse,
     SessionStateResponse,
     SessionSummary,
+    SuggestedOption,
 )
 from app.core.auth import get_current_user
 from app.core.config import settings
@@ -42,6 +43,46 @@ from app.services.qa_service import direct_search_qa
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["ordinance"])
+
+# 필드별 채팅 칩 선택지 (인터뷰 단계에서 사용)
+_FIELD_OPTIONS: dict[str, list[dict]] = {
+    "region": [
+        {"label": "서울특별시", "value": "서울특별시"},
+        {"label": "부산광역시", "value": "부산광역시"},
+        {"label": "인천광역시", "value": "인천광역시"},
+        {"label": "대구광역시", "value": "대구광역시"},
+        {"label": "경기도", "value": "경기도"},
+    ],
+    "purpose": [
+        {"label": "청년 창업 지원", "value": "청년 창업 지원"},
+        {"label": "소상공인 지원", "value": "소상공인 지원"},
+        {"label": "주거 복지", "value": "주거 복지 지원"},
+        {"label": "문화·체육 활동", "value": "문화·체육 활동 지원"},
+        {"label": "농업 진흥", "value": "농업 진흥 지원"},
+    ],
+    "target_group": [
+        {"label": "청년 (19~39세)", "value": "만 19세 이상 39세 이하 청년"},
+        {"label": "노인 (65세 이상)", "value": "만 65세 이상 노인"},
+        {"label": "장애인", "value": "장애인복지법상 등록 장애인"},
+        {"label": "소상공인", "value": "소상공인기본법상 소상공인"},
+        {"label": "다문화가족", "value": "다문화가족지원법상 다문화가족"},
+    ],
+    "support_type": [
+        {"label": "보조금 지급", "value": "보조금 지급"},
+        {"label": "현물 지원", "value": "현물 지원 (물품·서비스)"},
+        {"label": "바우처", "value": "바우처 지급"},
+        {"label": "교육·컨설팅", "value": "교육 및 컨설팅 지원"},
+        {"label": "시설 이용권", "value": "시설 이용 지원"},
+    ],
+}
+
+
+def _build_suggested_options(stage: str, missing_fields: list[str]) -> list[SuggestedOption]:
+    """인터뷰 단계에서 첫 번째 누락 필드의 선택지를 반환합니다."""
+    if stage != "interviewing" or not missing_fields:
+        return []
+    first_field = missing_fields[0]
+    return [SuggestedOption(**o) for o in _FIELD_OPTIONS.get(first_field, [])]
 
 
 def _derive_title(ordinance_info: dict, initial_message: str = "") -> str:
@@ -163,6 +204,7 @@ async def get_session_state(
         ordinance_info=values.get("ordinance_info", {}),
         article_queue=values.get("article_queue"),
         current_article_key=values.get("current_article_key"),
+        ordinance_type=values.get("ordinance_type"),
     )
 
 
@@ -216,6 +258,7 @@ async def create_session(
             title=_derive_title(ordinance_info, initial_message),
             chat_history=chat_history,
         )
+        missing_fields = result.get("missing_fields") or []
         return SessionCreateResponse(
             session_id=session_id,
             message=ai_message,
@@ -225,6 +268,8 @@ async def create_session(
             similar_ordinances=(
                 result.get("similar_ordinances") if stage in _SIMILAR_VISIBLE_STAGES else None
             ),
+            suggested_options=_build_suggested_options(stage, missing_fields) or None,
+            ordinance_type=result.get("ordinance_type"),
         )
 
     await db_create_session(
@@ -294,6 +339,7 @@ async def chat(
         chat_history=chat_history,
     )
 
+    missing_fields = result.get("missing_fields") or []
     return ChatResponse(
         session_id=sid,
         message=ai_response,
@@ -307,6 +353,8 @@ async def chat(
         ),
         article_queue=result.get("article_queue"),
         current_article_key=result.get("current_article_key"),
+        suggested_options=_build_suggested_options(stage, missing_fields) or None,
+        ordinance_type=result.get("ordinance_type"),
     )
 
 
@@ -369,6 +417,7 @@ async def submit_articles_batch(
         ),
         article_queue=result.get("article_queue"),
         current_article_key=result.get("current_article_key"),
+        ordinance_type=result.get("ordinance_type"),
     )
 
 

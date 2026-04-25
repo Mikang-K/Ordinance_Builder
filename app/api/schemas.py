@@ -8,6 +8,11 @@ class MessageRecord(BaseModel):
     text: str
 
 
+class SuggestedOption(BaseModel):
+    label: str   # 버튼 표시 텍스트
+    value: str   # 클릭 시 전송 값
+
+
 class SessionSummary(BaseModel):
     session_id: str
     title: str
@@ -27,6 +32,7 @@ class SessionStateResponse(BaseModel):
     ordinance_info: dict = {}
     article_queue: Optional[list[str]] = None
     current_article_key: Optional[str] = None
+    ordinance_type: Optional[str] = None
 
 
 class SessionCreateRequest(BaseModel):
@@ -44,6 +50,8 @@ class SessionCreateResponse(BaseModel):
     article_queue: Optional[list[str]] = None
     current_article_key: Optional[str] = None
     similar_ordinances: Optional[list] = None
+    suggested_options: Optional[list[SuggestedOption]] = None
+    ordinance_type: Optional[str] = None
 
 
 class SimilarOrdinance(BaseModel):
@@ -75,6 +83,8 @@ class ChatResponse(BaseModel):
     similar_ordinances: Optional[list[SimilarOrdinance]] = None  # similar cases from other regions
     article_queue: Optional[list[str]] = None
     current_article_key: Optional[str] = None
+    suggested_options: Optional[list[SuggestedOption]] = None  # 채팅 칩 선택지
+    ordinance_type: Optional[str] = None
 
 
 class ArticleBatchRequest(BaseModel):

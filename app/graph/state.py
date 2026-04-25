@@ -72,6 +72,9 @@ class OrdinanceBuilderState(TypedDict):
     legal_issues: list[dict]     # [{"severity": str, "description": str, ...}]
     is_legally_valid: Optional[bool]
 
+    # Ordinance type: "지원" | "설치·운영" | "관리·규제" | "복지·서비스" | None (legacy fallback)
+    ordinance_type: Optional[str]
+
     # --- Response to surface to the API caller ---
     response_to_user: str
     error_message: Optional[str]
