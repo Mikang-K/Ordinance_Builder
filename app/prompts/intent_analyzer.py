@@ -9,18 +9,30 @@ INTENT_ANALYZER_SYSTEM = """
 4. 이전 대화에서 이미 수집된 정보는 사용자가 명시적으로 변경하지 않는 한 유지하세요.
 5. 사용자가 여러 정보를 한 번에 제공하면 모두 추출하세요.
 
-missing_fields 판단 기준:
-- region: 지역이 명확히 특정되지 않으면 missing
-- purpose: 조례의 구체적 목적이 불분명하면 missing
-- target_group: 지원/규제 대상이 특정되지 않으면 missing
-- support_type: 지원 방식(금전적/현물/서비스)이 불명확하면 missing
+조례 유형별 필수 필드 (missing_fields 판단 기준):
+- region: 모든 유형에서 필수. 지역이 명확히 특정되지 않으면 missing.
+- purpose: 모든 유형에서 필수. 조례의 구체적 목적이 불분명하면 missing.
+- target_group: 모든 유형에서 필수. 지원/규제/수혜 대상이 특정되지 않으면 missing.
+- support_type: **'지원' 조례에만 필수**. 설치·운영/관리·규제/복지·서비스 조례에서는 missing에 포함하지 마세요.
+
+ordinance_type 추출 기준:
+- '지원' → 보조금, 지원금, 지원 등 금전/현물 지원 목적
+- '설치·운영' → 위원회, 센터, 기관 설치 및 운영
+- '관리·규제' → 시설 관리, 사용 허가, 과태료, 규제
+- '복지·서비스' → 돌봄, 복지서비스, 급여, 방문서비스
 """.strip()
 
 
-def build_intent_analyzer_human(existing_info: dict, user_input: str) -> str:
+def build_intent_analyzer_human(existing_info: dict, user_input: str, ordinance_type: str | None = None) -> str:
     existing_str = "\n".join(
         f"  {k}: {v}" for k, v in existing_info.items() if v
     ) or "  (없음)"
+
+    if ordinance_type and ordinance_type != "지원":
+        required_note = f"아직 수집되지 않은 필수 필드(region, purpose, target_group)를 missing_fields에 명시하세요.\n(조례 유형이 '{ordinance_type}'이므로 support_type은 필수 아님)"
+    else:
+        required_note = "아직 수집되지 않은 필수 필드(region, purpose, target_group, support_type)를 missing_fields에 명시하세요."
+
     return f"""
 현재까지 수집된 정보:
 {existing_str}
@@ -28,6 +40,5 @@ def build_intent_analyzer_human(existing_info: dict, user_input: str) -> str:
 사용자의 새 입력:
 "{user_input}"
 
-위 정보를 분석하여 추출하고, 아직 수집되지 않은 필수 필드(region, purpose, target_group, support_type)를
-missing_fields에 명시하세요.
+위 정보를 분석하여 추출하고, {required_note}
 """.strip()

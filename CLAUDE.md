@@ -1240,5 +1240,58 @@ Google Cloud Console → **APIs & Services → OAuth consent screen** → **"PUB
 
 ---
 
+### 24. REQUIRED_FIELDS — 조례 유형별 필수 필드 분기 (2026-04-26)
+
+**증상**: "설치·운영" / "관리·규제" / "복지·서비스" 조례 선택 후 기본 정보를 제출하면
+`support_type`이 없다고 인터뷰 루프에 빠짐. POST /api/v1/session 500 에러.
+
+**원인**:
+- `REQUIRED_FIELDS = ["region", "purpose", "target_group", "support_type"]` 고정 → 모든 유형에서 `support_type` 요구
+- `intent_analyzer_node`가 유형 무관하게 `REQUIRED_FIELDS`로 missing 계산
+- 프롬프트도 모든 유형에서 `support_type`을 필수로 지시
+
+**수정 파일 (3곳)**:
+
+1. `app/graph/state.py` — `TYPE_REQUIRED_FIELDS` 딕셔너리 추가:
+   ```python
+   TYPE_REQUIRED_FIELDS = {
+       "지원":      ["region", "purpose", "target_group", "support_type"],
+       "설치·운영": ["region", "purpose", "target_group"],
+       "관리·규제": ["region", "purpose", "target_group"],
+       "복지·서비스": ["region", "purpose", "target_group"],
+   }
+   ```
+
+2. `app/graph/nodes/intent_analyzer.py` — missing 계산 시 유형별 필드 사용:
+   ```python
+   required = TYPE_REQUIRED_FIELDS.get(new_ordinance_type or "", REQUIRED_FIELDS)
+   missing = [f for f in required if not updated_info.get(f)]
+   ```
+   + `build_intent_analyzer_human(..., ordinance_type)` 호출 시 유형 전달
+
+3. `app/prompts/intent_analyzer.py` — 프롬프트에 유형별 필수 필드 규칙 명시:
+   - `support_type`은 '지원' 조례에만 필수임을 LLM에 명시
+   - `build_intent_analyzer_human`에 `ordinance_type` 파라미터 추가하여 프롬프트 동적 생성
+
+4. `app/graph/nodes/interviewer.py` — `target_group` 질문을 조례 유형별로 분기:
+   - `TARGET_GROUP_BY_TYPE` 딕셔너리 추가 (설치·운영/관리·규제/복지·서비스 전용 문구)
+
+**추가 수정**: `app/graph/nodes/graph_retriever.py` — Neo4j 연결 실패 시 graceful fallback (빈 결과 반환, 500 방지):
+```python
+try:
+    legal_basis = db.find_legal_basis(...)
+    ...
+except Exception as e:
+    logger.warning("Graph DB unavailable: %s", e)
+    legal_basis = similar_ordinances = article_examples = legal_terms = []
+```
+
+**체크리스트**:
+- 새 조례 유형 추가 시 `TYPE_REQUIRED_FIELDS`에 해당 유형 필드 목록을 반드시 추가
+- `support_type`은 지원 조례 전용 필드임을 기억할 것
+- `graph_retriever.py`는 DB 연결 실패를 예외로 처리해 500이 아닌 graceful degradation으로 동작
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.

@@ -7,7 +7,15 @@ from langgraph.graph.message import add_messages
 
 
 # Required fields that must be collected before drafting can begin
-REQUIRED_FIELDS = ["region", "purpose", "target_group", "support_type"]
+REQUIRED_FIELDS = ["region", "purpose", "target_group", "support_type"]  # 지원 조례 / legacy fallback
+
+# 조례 유형별 필수 필드 — support_type은 지원 조례에만 해당
+TYPE_REQUIRED_FIELDS: dict[str, list[str]] = {
+    "지원":      ["region", "purpose", "target_group", "support_type"],
+    "설치·운영": ["region", "purpose", "target_group"],
+    "관리·규제": ["region", "purpose", "target_group"],
+    "복지·서비스": ["region", "purpose", "target_group"],
+}
 
 
 class OrdinanceBuilderState(TypedDict):

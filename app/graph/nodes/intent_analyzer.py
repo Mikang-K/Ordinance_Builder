@@ -5,7 +5,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
-from app.graph.state import REQUIRED_FIELDS, OrdinanceBuilderState
+from app.graph.state import REQUIRED_FIELDS, TYPE_REQUIRED_FIELDS, OrdinanceBuilderState
 from app.prompts.intent_analyzer import INTENT_ANALYZER_SYSTEM, build_intent_analyzer_human
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,8 @@ async def intent_analyzer_node(
     structured_llm = llm.with_structured_output(ExtractedInfo)
     existing_info: dict = state.get("ordinance_info") or {}
 
-    human_prompt = build_intent_analyzer_human(existing_info, state["user_input"])
+    current_ordinance_type = state.get("ordinance_type")
+    human_prompt = build_intent_analyzer_human(existing_info, state["user_input"], current_ordinance_type)
     messages = [
         ("system", INTENT_ANALYZER_SYSTEM),
         ("human", human_prompt),
@@ -70,8 +71,9 @@ async def intent_analyzer_node(
     extracted_type = getattr(extracted, "ordinance_type", None)
     new_ordinance_type = extracted_type or state.get("ordinance_type")
 
-    # Recalculate missing fields based on actual values (LLM hint is advisory only)
-    missing = [f for f in REQUIRED_FIELDS if not updated_info.get(f)]
+    # 조례 유형에 따라 필수 필드를 다르게 적용 (legacy/지원 조례는 support_type 포함)
+    required = TYPE_REQUIRED_FIELDS.get(new_ordinance_type or "", REQUIRED_FIELDS)
+    missing = [f for f in required if not updated_info.get(f)]
 
     logger.info(
         "[intent_analyzer] extracted=%s | ordinance_type=%s | missing=%s",

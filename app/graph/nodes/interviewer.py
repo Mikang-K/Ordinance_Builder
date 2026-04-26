@@ -12,6 +12,13 @@ FIELD_QUESTIONS: dict[str, str] = {
     "industry_sector": "특정 산업 분야가 있나요?\n  (예: IT/소프트웨어, 농업, 문화예술, 제조업)",
 }
 
+# 조례 유형별 target_group 질문 — 각 유형에 맞는 예시 제공
+TARGET_GROUP_BY_TYPE: dict[str, str] = {
+    "설치·운영": "설치하려는 위원회/기관이 관할하거나 대상으로 하는 집단은 누구인가요?\n  (예: 지역 청년, 중소기업인, 문화예술인)",
+    "관리·규제": "규제 또는 관리 대상이 되는 시설·사업자·행위는 무엇인가요?\n  (예: 체육시설 이용자, 공유재산 사용자, 도로점용 사업자)",
+    "복지·서비스": "서비스를 제공받을 대상은 어떻게 되나요?\n  (예: 65세 이상 노인, 기초생활수급자, 장애인 가구)",
+}
+
 
 def interviewer_node(state: OrdinanceBuilderState) -> dict:
     """
@@ -27,11 +34,17 @@ def interviewer_node(state: OrdinanceBuilderState) -> dict:
     missing: list[str] = state.get("missing_fields") or []
     similar: list[dict] = state.get("similar_ordinances") or []
     turn_count: int = (state.get("interview_turn_count") or 0) + 1
+    ordinance_type: str | None = state.get("ordinance_type")
+
+    def get_question(field: str) -> str:
+        if field == "target_group" and ordinance_type in TARGET_GROUP_BY_TYPE:
+            return TARGET_GROUP_BY_TYPE[ordinance_type]
+        return FIELD_QUESTIONS.get(field, f"{field} 정보를 알려주세요.")
 
     # Ask at most 2 fields per turn for better UX
     fields_to_ask = missing[:2]
     question_lines = "\n".join(
-        f"• {FIELD_QUESTIONS.get(f, f'{f} 정보를 알려주세요.')}"
+        f"• {get_question(f)}"
         for f in fields_to_ask
     )
 
