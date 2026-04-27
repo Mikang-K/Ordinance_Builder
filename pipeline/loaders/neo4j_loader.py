@@ -111,10 +111,12 @@ SET p.embedding = item.embedding
 """
 
 _VECTOR_SIMILAR_TO = """
-CALL db.index.vector.queryNodes('idx_ordinance_embedding', $top_k, $embedding)
-YIELD node AS candidate, score
-WHERE candidate.id <> $ordinance_id AND score >= $threshold
-WITH candidate, score
+MATCH (candidate:Ordinance)
+WHERE candidate.id <> $ordinance_id AND candidate.embedding IS NOT NULL
+WITH candidate, vector.similarity.cosine(candidate.embedding, $embedding) AS score
+WHERE score >= $threshold
+ORDER BY score DESC
+LIMIT $top_k
 MATCH (src:Ordinance {id: $ordinance_id})
 MERGE (src)-[r:SIMILAR_TO]-(candidate)
 ON CREATE SET r.score = score, r.method = 'vector'
