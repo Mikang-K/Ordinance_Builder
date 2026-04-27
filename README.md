@@ -1,354 +1,228 @@
-# 조례 빌더 AI (Ordinance Builder AI)
+# 조례 빌더 AI
 
-> 대화형 AI를 통해 지자체별 특수성을 반영하고, 상위법령을 준수하는 **지방 조례 초안**을 단계별로 생성·검토하는 풀스택 AI 서비스
+> **대화형 AI로 지방자치단체 조례 초안을 자동 생성·검증하는 풀스택 서비스**
 
-## 프로젝트 소개
+법령 전문 지식 없이도 자연어 대화만으로 법적으로 타당한 지방 조례 초안을 단계별로 작성할 수 있습니다.  
+Neo4j 그래프 DB 기반 법령 검색과 멀티 LLM 파이프라인이 상위법 준수 여부를 실시간으로 검증합니다.
 
-- **대화형 인터뷰**: 사용자가 자연어로 아이디어를 입력하면 AI가 필수 정보를 단계적으로 수집
-- **그래프 기반 법령 검색**: Neo4j Graph DB에서 관련 상위법·유사 조례를 의미적으로 탐색
-- **법적 초안 자동 생성**: 수집된 정보와 법령 근거를 바탕으로 완전한 조례 조문 출력
-- **실시간 법률 검증**: 생성된 초안을 상위법 조항과 대조하여 충돌 위험 고지
-
-를 제공합니다.
-
-### 핵심 설계 원칙
-
-| 원칙 | 구현 방식 |
-|------|-----------|
-| **법적 안정성** | Neo4j LIMITS/CONFLICTS_WITH 관계 기반 실시간 충돌 감지 |
-| **사용자 편의성** | 단계별 인터뷰 루프, 조항별 "기본값" 자동 생성 옵션 |
-| **데이터 기반** | 전국 지자체 조례 SIMILAR_TO 관계망, 벡터 유사도 검색 |
-| **확장성** | GraphDBInterface(ABC) 추상화로 Mock↔Neo4j↔AuraDB 교체 가능 |
+**배포 주소**: https://ordinance-builder-b9f6c.web.app
 
 ---
 
-## 핵심 기능
+## 주요 기능
 
-### 1. 대화형 조례 인터뷰
+| 기능 | 설명 |
+|------|------|
+| **대화형 인터뷰** | 자연어 입력으로 조례 필수 정보(지역·목적·대상·지원유형)를 단계적으로 수집 |
+| **그래프 기반 법령 검색** | DELEGATES → BASED_ON → 키워드 → 벡터 유사도 4단계 우선순위로 상위법 탐색 |
+| **조문별 세부 입력** | 9개 조문 템플릿(목적·정의·지원대상·금액·신청·심사·환수 등)을 개별 인터뷰 |
+| **자동 초안 생성** | Claude Opus 4.6이 수집 정보·법령 근거·유사 조례를 바탕으로 완전한 조례문 출력 |
+| **AI 자체 검토** | 초안을 AI가 스스로 검토하고, 사용자 피드백을 반영해 즉시 수정 |
+| **법적 정합성 검증** | GPT-4o가 상위법 충돌을 HIGH·MEDIUM·LOW 3단계 심각도로 분류해 고지 |
+| **GraphRAG Q&A** | 워크플로우와 무관하게 언제든 법령·조례 내용을 질의응답 가능 |
+| **조례 유형 분기** | 지원·설치·운영·관리·규제·복지·서비스 유형별로 필수 필드 및 인터뷰 경로 분기 |
 
-필수 4개 필드(`region`, `purpose`, `target_group`, `support_type`)가 모두 확보될 때까지 자연어로 반복 질문합니다. Gemini가 사용자 입력에서 정보를 자동 추출하므로, 구조화된 폼 없이 자유로운 대화가 가능합니다.
+---
 
-### 2. 조항별 세부 인터뷰
+## 기술 스택
 
-9개 조문 템플릿(목적·정의·지원대상·지원내용·지원금액·신청방법·심사선정·환수제재·위임)에 대해 개별적으로 세부 내용을 수집합니다. 각 조항마다 "기본값"을 입력하면 AI가 유사 조례를 참고해 자동 생성합니다.
+### 백엔드
 
-### 3. 그래프 DB 기반 법령 검색
+| 역할 | 기술 |
+|------|------|
+| API 서버 | Python · FastAPI · Uvicorn / Gunicorn |
+| AI 오케스트레이션 | LangGraph · LangChain |
+| 정보 추출 LLM | Gemini 2.5 Pro (`langchain-google-genai`) |
+| 초안 생성·검토 LLM | Claude Opus 4.6 (`langchain-anthropic`) |
+| 법률 검증 LLM | GPT-4o (`langchain-openai`) |
+| 임베딩 | `models/gemini-embedding-001` (3072차원) |
+| 그래프 DB | Neo4j 5.23 (로컬) · AuraDB (프로덕션) |
+| 세션 체크포인트 | PostgreSQL · `langgraph-checkpoint-postgres` |
+| 인증 | Firebase Admin SDK |
+| Rate Limiting | slowapi |
 
-```
-Graph DB 탐색 경로 (우선순위 순):
-1. DELEGATES 경로: 상위법이 명시적으로 위임한 조례 영역
-2. BASED_ON 경로: 해당 영역 기존 조례의 법령 근거
-3. 키워드 폴백 + 벡터 유사도 검색 (Gemini Embedding 3072차원)
-```
+### 프론트엔드
 
-Neo4j의 관계 그래프를 순회해 법령 근거와 타 지자체 유사 조례를 함께 제공합니다.
+| 역할 | 기술 |
+|------|------|
+| UI 프레임워크 | React 18 · TypeScript · Vite |
+| 인증 | Firebase Auth (`signInWithRedirect`) |
 
-### 4. 법적 조문 초안 생성
+### 인프라
 
-Gemini 2.5 Pro가 수집된 정보와 법령 근거를 바탕으로 제1조~최종조까지 완전한 조례문을 생성합니다. 구조화 출력(`OrdinanceDraft` Pydantic 모델)으로 파싱 오류 없이 안정적으로 처리됩니다.
-
-### 5. AI 자체 검토 및 사용자 편집
-
-생성된 초안을 AI가 스스로 검토합니다. 사용자는 편집 모달에서 직접 수정 후 재검증을 요청할 수 있으며, `draft_review_decision`(confirm/revise)으로 워크플로우가 분기됩니다.
-
-### 6. 상위법 정합성 검증
-
-```json
-{
-  "severity": "HIGH",
-  "related_statute": "보조금 관리에 관한 법률 제22조",
-  "description": "보조금 지급 상한선 미설정 시 법 위반 가능",
-  "suggestion": "제5조에 연간 지급 한도 명시 필요"
-}
-```
-
-HIGH·MEDIUM·LOW 3단계 심각도로 분류하여 사용자에게 위험 요소를 고지합니다.
+| 역할 | 기술 |
+|------|------|
+| 백엔드 배포 | GCP Cloud Run |
+| 프론트엔드 배포 | Firebase Hosting |
+| 컨테이너 (로컬) | Docker Compose |
+| ETL 데이터 소스 | 국가법령정보센터 Open API |
 
 ---
 
 ## 시스템 아키텍처
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    React + TypeScript (Vite)                    │
-│              Chat UI / DraftModal / LegalIssuesPanel            │
-│                      http://localhost:3000                      │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ REST API (JSON)
-┌──────────────────────────▼──────────────────────────────────────┐
-│                   FastAPI Backend  :8000                        │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                  LangGraph Workflow                      │   │
-│  │                                                          │   │
-│  │  START ──[route_at_start]─────────────────────────────► │   │
-│  │          │                                               │   │
-│  │          ├─[legal_review_requested]─► legal_checker      │   │
-│  │          ├─[draft_review]──────────► draft_reviewer      │   │
-│  │          ├─[article_interviewing]──► article_interviewer │   │
-│  │          └─[otherwise]─────────────► intent_analyzer     │   │
-│  │                                           │              │   │
-│  │                              [누락 필드?]─┤              │   │
-│  │                         yes ◄─────────────┤              │   │
-│  │                          │          [정보 완비]          │   │
-│  │                    interviewer            │              │   │
-│  │                          │         graph_retriever       │   │
-│  │                         END               │              │   │
-│  │                               [article_queue?]           │   │
-│  │                          yes ◄────────────┤              │   │
-│  │                          │           no ◄─┤              │   │
-│  │                   article_planner   drafting_agent        │   │
-│  │                          │               │              │   │
-│  │                   article_interviewer    END             │   │
-│  │                [조항 완료?]─yes─► drafting_agent         │   │
-│  │                                                          │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  MemorySaver (thread_id = session_id)                          │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ Bolt (7687)
-┌──────────────────────────▼──────────────────────────────────────┐
-│              Neo4j Graph DB  :7474 / :7687                      │
-│  Vector Index: idx_provision_embedding (3072d, cosine)          │
-│  Vector Index: idx_ordinance_embedding  (3072d, cosine)         │
-│  노드: Statute / Provision / Ordinance / LegalTerm              │
-└─────────────────────────────────────────────────────────────────┘
-                           ▲
-          ┌────────────────┘
-          │  pipeline/ (독립 모듈)
-┌─────────┴───────────────────────────────────────────────────────┐
-│         국가법령정보센터 Open API  →  ETL Pipeline               │
-│   LawApiClient → SchemaMapper → Neo4jLoader                     │
-│   initial_load.py (4단계) / incremental_update.py (증분)        │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│           React + TypeScript (Firebase Hosting)           │
+│   ChatWindow · DraftModal · ArticleItemsModal · QAPanel  │
+└────────────────────┬─────────────────────────────────────┘
+                     │ REST API (JSON + Firebase JWT)
+┌────────────────────▼─────────────────────────────────────┐
+│              FastAPI  ·  GCP Cloud Run                    │
+│  ┌───────────────────────────────────────────────────┐   │
+│  │             LangGraph Workflow                    │   │
+│  │                                                   │   │
+│  │  START → route_at_start                           │   │
+│  │     ├─[legal_review]  → legal_checker  (GPT-4o)   │   │
+│  │     ├─[draft_review]  → draft_reviewer (Claude)   │   │
+│  │     ├─[article_*]     → article_interviewer       │   │
+│  │     └─[default]       → intent_analyzer (Gemini)  │   │
+│  │                              │                    │   │
+│  │              [필드 누락] → interviewer → END       │   │
+│  │              [정보 완비] → graph_retriever         │   │
+│  │                              │                    │   │
+│  │              [큐 없음]  → article_planner → END    │   │
+│  │              [큐 있음]  → article_interviewer      │   │
+│  │                              │                    │   │
+│  │              [조항 완료] → drafting_agent (Claude) │   │
+│  │                              └─ → draft_reviewer  │   │
+│  │                                  └─ → legal_checker│  │
+│  └───────────────────────────────────────────────────┘   │
+│  PostgreSQL  (LangGraph 체크포인트 + 세션 메타데이터)       │
+└────────────────────┬─────────────────────────────────────┘
+                     │ Bolt (7687)
+┌────────────────────▼─────────────────────────────────────┐
+│            Neo4j AuraDB  (벡터 인덱스 3072d cosine)        │
+│  Statute · Provision · Ordinance · LegalTerm 노드         │
+│  DELEGATES · BASED_ON · SIMILAR_TO · CONFLICTS_WITH 관계  │
+└────────────────────┬─────────────────────────────────────┘
+                     ▲
+          ┌──────────┘  ETL Pipeline (독립 모듈)
+          │  국가법령정보센터 Open API (XML)
+          │  LawApiClient → SchemaMapper → Neo4jLoader
+          └──────────────────────────────────────────────
 ```
 
 ---
 
-## LangGraph 워크플로우
+## LangGraph 멀티 LLM 워크플로우
 
-### State 설계
+각 노드에 역할에 최적화된 LLM을 배정한 상태 머신입니다.  
+`messages` 필드만 `add_messages` 리듀서로 누적하고, 나머지 상태는 덮어쓰기로 관리합니다.  
+LangGraph `interrupt` 없이 `/chat` 요청마다 그래프 진입점에 재진입하는 방식으로 인터뷰 루프를 구현합니다.
 
-`OrdinanceBuilderState`는 TypedDict 기반으로 전체 대화 맥락을 관리합니다.
+| 노드 | LLM | 역할 | 구조화 출력 |
+|------|-----|------|------------|
+| `intent_analyzer` | Gemini 2.5 Pro | 자연어 → 필드 추출 | `ExtractedInfo` |
+| `interviewer` | — | 누락 필드 질문 생성 | — |
+| `graph_retriever` | — | Neo4j 법령 근거·유사 조례 탐색 | — |
+| `article_planner` | — | 9개 조문 큐 구성 | — |
+| `article_interviewer` | — | 조문별 세부 내용 수집 | — |
+| `drafting_agent` | Claude Opus 4.6 | 완전한 조례 초안 생성 | `OrdinanceDraft` |
+| `draft_reviewer` | Claude Opus 4.6 | AI 자체 검토 및 수정 | `ReviewDecision` |
+| `legal_checker` | GPT-4o | 상위법 충돌 검증 | `LegalCheckResult` |
 
-```python
-class OrdinanceBuilderState(TypedDict):
-    messages: Annotated[list[BaseMessage], add_messages]  # 누적 (add_messages reducer)
-    user_input: str
-    ordinance_info: dict          # region / purpose / target_group / support_type
-    current_stage: Literal[...]   # 10개 단계
-    missing_fields: list[str]
-    interview_turn_count: int
-    max_interview_turns: int      # default: 5
-
-    # 조항 인터뷰
-    article_queue: list[str]      # 미처리 조항 목록
-    current_article_key: str
-    article_contents: dict        # {조항키: 사용자입력 | None}
-
-    # DB 검색 결과
-    legal_basis: list[dict]       # 상위법 조항
-    similar_ordinances: list[dict]
-    article_examples: list[dict]
-
-    # 초안
-    draft_articles: list[dict]    # [{"article_no", "title", "content"}]
-    draft_full_text: str
-    draft_review_decision: Optional[Literal["confirm", "revise"]]
-
-    # 법률 검증
-    legal_issues: list[dict]      # [{"severity", "description", "suggestion"}]
-    is_legally_valid: Optional[bool]
-    response_to_user: str
-```
-
-> **핵심 설계**: `messages`만 `add_messages` 리듀서로 누적하고, 나머지 필드는 덮어쓰기로 처리합니다. 인터뷰 루프는 LangGraph의 `interrupt` 없이, `/chat` 요청마다 그래프 진입점으로 재진입하는 방식을 사용합니다.
-
-### 노드별 역할
-
-| 노드 | LLM | 기능 | 출력 |
-|------|-----|------|------|
-| `intent_analyzer` | Gemini 2.5 Pro | 자연어 입력 → 필드 추출 (`ExtractedInfo` 구조화 출력) | `ordinance_info`, `missing_fields` |
-| `interviewer` | 없음 | 미수집 필드 질문 생성 (최대 2개씩) | `response_to_user` |
-| `graph_retriever` | 없음 | Neo4j 쿼리: 상위법 + 유사조례 + 조문 예시 | `legal_basis`, `similar_ordinances` |
-| `article_planner` | 없음 | 9개 조항 순서 정의 + 첫 질문 | `article_queue` |
-| `article_interviewer` | 없음 | 조항별 답변 수집, "기본값" → None 처리 | `article_contents`, `current_stage` |
-| `drafting_agent` | Claude Opus 4.6 | 조례 초안 생성 (`OrdinanceDraft`) | `draft_full_text` |
-| `draft_reviewer` | Claude Opus 4.6 | 피드백 분류 + 수정 적용 | `draft_review_decision` |
-| `legal_checker` | GPT-4o | 상위법 충돌 검증 (`LegalCheckResult`) | `legal_issues`, `is_legally_valid` |
-
-### 조건부 분기 (edges/conditions.py)
+### 조건부 분기 (5개)
 
 ```
-route_at_start(state) →
-  "legal_review_requested"  # draft_text와 함께 POST된 경우
-  "draft_review"            # 사용자가 초안 검토 요청
-  "article_interviewing"    # 조항 Q&A 진행 중
-  "default"                 # intent_analyzer로 진입
-
-after_intent_analyzer(state) →
-  "interviewer"   # missing_fields 존재
-  "graph_retriever"  # 정보 완비
-
-after_graph_retriever(state) →
-  "article_planner"   # article_queue가 없으면 새로 계획
-  "drafting_agent"    # 이미 queue 있으면 생성
-
-after_article_interviewer(state) →
-  "drafting_agent"  # 모든 조항 완료
-  END               # 다음 조항 질문 (다음 /chat 대기)
-
-after_draft_reviewer(state) →
-  "legal_checker"  # confirm
-  END              # revise (수정된 초안 반환)
+route_at_start          → legal_checker | draft_reviewer | article_interviewer | intent_analyzer
+route_after_intent      → interviewer (필드 누락) | graph_retriever (완비)
+route_after_retriever   → article_planner (큐 없음) | drafting_agent (큐 있음)
+route_after_article     → drafting_agent (완료) | END (다음 /chat 대기)
+route_after_draft_review → legal_checker (confirm) | END (revise)
 ```
 
 ---
 
-## OWL 온톨로지 설계
+## Neo4j 그래프 데이터 모델
 
-법령 도메인의 개념 체계를 **Protégé**로 모델링한 OWL 온톨로지(`ordinance.rdf`)입니다. Neo4j 그래프 스키마의 개념적 기반이 되며, Phase 3에서 SWRL 논리 규칙 추론에 활용.
-
-### 클래스 계층 구조
-
-```
-Thing
-├── 법규범
-│   ├── 상위법률                  ← 헌법·법률·시행령
-│   └── 자치법규
-│       ├── 조례                  ← 지방의회 제정
-│       └── 규칙                  ← 지자체장 제정
-│
-├── 조문구조
-│   └── 장(章)
-│       └── 조(條)
-│           └── 항(項)
-│               └── 호(號)
-│                   └── 목(目)   ← 최소 조문 단위
-│
-└── 법적개념
-    ├── 권리주체                  ← 행위의 주체 (개인·법인·기관)
-    ├── 법적행위                  ← 보조금 지급, 신청, 제재 등
-    └── 객체                      ← 행위의 대상
-```
-
-### 객체 속성 (Object Properties)
-
-| 속성 | 도메인 | 범위 | 설명 |
-|------|--------|------|------|
-| `위임하다` | 상위법률 | 조례 | 상위법이 조례 제정을 위임 |
-| `위임근거를_가지다` | 조례 | 상위법률 | 조례가 보유한 위임 근거 |
-| `상충하다` | 조례 | 상위법률 | 조례가 상위법과 충돌 |
-| `준용하다` | 조례 | 상위법률 | 조례가 상위법을 준용 |
-| `포함하다` | 조문구조 | 조문구조 | 장→조→항→호→목 계층 포함 관계 |
-| `정의하다` | 조문구조 | 법적개념 | 조문이 법적 개념을 정의 |
-| `수행주체이다` | 법적행위 | 권리주체 | 특정 행위의 권리 주체 |
-
-### 데이터 속성 (Data Properties)
-
-| 속성 | 타입 | 설명 |
-|------|------|------|
-| `조문번호` | `xsd:integer` | 조문의 일련번호 |
-| `조문제목` | `xsd:string` | 조문의 표제 |
-| `조문` | `xsd:string` | 조문 본문 텍스트 |
-| `법적효력일` | `xsd:dateTime` | 시행 일자 |
-
-### Neo4j 스키마와의 매핑
-
-OWL 클래스와 속성은 Neo4j 그래프 노드·관계로 다음과 같이 대응됩니다:
-
-| OWL 개념 | Neo4j 노드/관계 |
-|----------|----------------|
-| `상위법률` | `:Statute` 노드 |
-| `조례` | `:Ordinance` 노드 |
-| `조(條)` | `:Provision` 노드 |
-| `항/호/목` | `:Paragraph` / `:Item` / `:SubItem` 노드 |
-| `법적개념` | `:LegalTerm` 노드 |
-| `위임하다` | `DELEGATES` 관계 |
-| `위임근거를_가지다` | `BASED_ON` 관계 |
-| `상충하다` | `CONFLICTS_WITH` 관계 |
-| `포함하다` | `CONTAINS` 관계 |
-| `정의하다` | `DEFINES` 관계 |
-
----
-
-## 데이터베이스 스키마
-
-### Neo4j 노드
+### 노드 타입
 
 | 레이블 | 주요 속성 | 설명 |
 |--------|-----------|------|
-| `Statute` | `id`, `title`, `category`, `enforcement_date`, `embedding` | 상위 법령 |
-| `Provision` | `id`, `article_no`, `content_text`, `is_penalty_clause`, `embedding` | 법령 개별 조문 |
-| `Ordinance` | `id`, `region_name`, `title`, `enforcement_date`, `embedding` | 지자체 조례 |
-| `LegalTerm` | `term_name`, `definition`, `synonyms` | 핵심 법률 용어 |
-| `Paragraph` | `id`, `content_text` | 조문의 항(項) |
-| `Item` | `id`, `content_text` | 조문의 호(號) |
-| `SubItem` | `id`, `content_text` | 조문의 목(目) |
+| `Statute` | id · title · category · enforcement_date · embedding | 상위 법령 |
+| `Provision` | id · article_no · content_text · is_penalty_clause · embedding | 법령 조문 |
+| `Ordinance` | id · region_name · title · enforcement_date · embedding | 지자체 조례 |
+| `LegalTerm` | term_name · definition · synonyms | 핵심 법률 용어 |
 
 ### 관계 타입
 
-| 타입 | 방향 | 설명 |
-|------|------|------|
-| `CONTAINS` | `Statute → Provision` | 법령 → 세부 조문 |
-| `BASED_ON` | `Ordinance → Statute` | 조례의 법령 근거 |
-| `DELEGATES` | `Statute → Ordinance` | 위임 관계 (우선 탐색) |
-| `SUPERIOR_TO` | `Statute → Ordinance` | 법적 위계질서 |
-| `SIMILAR_TO` | `Ordinance ↔ Ordinance` | 지자체 간 유사 조례 |
-| `LIMITS` | `Provision → LegalTerm` | 조항의 행위 제한 범위 |
-| `CONFLICTS_WITH` | `Ordinance → Statute` | 충돌 관계 |
-| `REFERENCES` | `Provision → Provision` | 조문 간 인용 |
-| `DEFINES` | `Statute → LegalTerm` | 법령이 정의하는 용어 |
+| 관계 | 방향 | 탐색 우선순위 |
+|------|------|--------------|
+| `DELEGATES` | Statute → Ordinance | 1순위 — 명시적 위임 |
+| `BASED_ON` | Ordinance → Statute | 2순위 — 조례 법령 근거 |
+| `CONTAINS` | Statute → Provision | — |
+| `SIMILAR_TO` | Ordinance ↔ Ordinance | 벡터 유사도 기반 |
+| `CONFLICTS_WITH` | Ordinance → Statute | 충돌 감지 |
+| `SUPERIOR_TO` | Statute → Ordinance | 법적 위계 |
 
 ### 벡터 인덱스
 
 ```cypher
-CREATE VECTOR INDEX idx_provision_embedding
-  FOR (p:Provision) ON p.embedding
-  OPTIONS {indexConfig: {`vector.dimensions`: 3072, `vector.similarity_function`: 'cosine'}}
-
 CREATE VECTOR INDEX idx_ordinance_embedding
   FOR (o:Ordinance) ON o.embedding
   OPTIONS {indexConfig: {`vector.dimensions`: 3072, `vector.similarity_function`: 'cosine'}}
 ```
 
-임베딩 모델: `models/gemini-embedding-001` (3072차원)
+Neo4j 5.23+ 권장 쿼리 패턴 (`db.index.vector.queryNodes` deprecated 대응):
+
+```cypher
+MATCH (o:Ordinance)
+WHERE o.embedding IS NOT NULL
+WITH o, vector.similarity.cosine(o.embedding, $embedding) AS score
+ORDER BY score DESC LIMIT $limit
+```
+
+---
+
+## OWL 온톨로지
+
+법령 도메인 개념을 Protégé로 모델링한 `ordinance.rdf` — Neo4j 스키마의 개념적 기반입니다.
+
+```
+법규범
+├── 상위법률   ──→  :Statute 노드
+└── 자치법규
+    └── 조례   ──→  :Ordinance 노드
+
+조문구조
+└── 조(條)     ──→  :Provision 노드
+    └── 항·호·목
+
+객체 속성 (OWL → Neo4j 관계)
+  위임하다       → DELEGATES
+  위임근거를_가지다 → BASED_ON
+  상충하다       → CONFLICTS_WITH
+  포함하다       → CONTAINS
+  정의하다       → DEFINES
+```
 
 ---
 
 ## ETL 파이프라인
 
-국가법령정보센터 Open API에서 데이터를 수집해 Neo4j에 적재하는 독립 모듈입니다.
-
-### 파이프라인 구성
+국가법령정보센터 Open API에서 법령·조례를 수집해 Neo4j에 MERGE 방식으로 적재합니다.
 
 ```
 LawApiClient (XML 파싱)
     ↓
-SchemaMapper (API 응답 → Node 객체)
+SchemaMapper (API 응답 → Graph 노드 객체)
     ↓
-Neo4jLoader (MERGE + 관계 구축 + 벡터 임베딩)
+Neo4jLoader (MERGE + 관계 구축 + Gemini Embedding)
 ```
 
-### 초기 적재 4단계 (initial_load.py)
+**초기 적재 4단계** (`initial_load.py`):
 
-```
-Phase 1: mandatory_statutes 6개 법령 강제 적재
-         (지방자치법, 청년기본법, 보조금 관리법 등)
+| Phase | 내용 |
+|-------|------|
+| 1 | 필수 법령 6개 강제 적재 (지방자치법·청년기본법·보조금관리법 등) |
+| 2 | 도메인 키워드 기반 법령 검색 및 적재 |
+| 3 | 도메인 키워드 기반 전국 지자체 조례 수집 |
+| 4 | 관계 구축 (BASED_ON·SIMILAR_TO·DELEGATES 등) + 벡터 임베딩 생성 |
 
-Phase 2: domain_keywords 기반 법령 검색 및 적재
-         키워드: 청년, 창업, 기업지원, 소상공인, 중소기업 등
-
-Phase 3: domain_keywords 기반 조례 검색 및 적재
-         전국 지자체 조례 수집
-
-Phase 4: 노드 간 관계 구축
-         BASED_ON, SUPERIOR_TO, SIMILAR_TO, DELEGATES 등
-         + 전체 Provision 노드 벡터 임베딩 생성
-```
-
-### 변경 감지 (change_detector.py)
-
-`enforcement_date` 비교로 개정 여부를 판단하며, 현행 버전만 유지하는 방식으로 증분 업데이트를 처리합니다.
+**조례 유형별 확장 적재** (`type_load.py`):  
+`--type 설치·운영 | 관리·규제 | 복지·서비스 | all` 인자로 유형별 선택 적재.  
+`SKIP_PROVISION_EMBEDDING=true` 내부 기본 적용 (AuraDB 8GB 용량 보호).
 
 ---
 
@@ -356,92 +230,131 @@ Phase 4: 노드 간 관계 구축
 
 ```
 Ordinance_Builder/
-├── app/                                # FastAPI + LangGraph 애플리케이션
-│   ├── main.py                         # FastAPI 진입점 (lifespan 훅)
-│   ├── api/
-│   │   ├── schemas.py                  # Pydantic 요청/응답 모델
-│   │   └── routers/
-│   │       ├── chat.py                 # POST /api/v1/session, /chat, /finalize
-│   │       └── debug.py                # 디버그 엔드포인트
+├── app/
+│   ├── main.py                     # FastAPI 진입점 (lifespan, 미들웨어)
+│   ├── api/routers/
+│   │   ├── chat.py                 # /session · /chat · /articles_batch · /finalize
+│   │   └── debug.py                # 개발용 디버그 엔드포인트
 │   ├── core/
-│   │   ├── config.py                   # 환경 변수 설정 (pydantic-settings) — LLM_* 노드별 provider 포함
-│   │   ├── llm.py                      # provider별 캐싱 팩토리 get_llm(provider) — Gemini/OpenAI/Anthropic
-│   │   └── embedder.py                 # Gemini 임베딩 클라이언트 (Neo4j 벡터 인덱스 고정)
+│   │   ├── config.py               # 환경변수 (pydantic-settings)
+│   │   ├── llm.py                  # provider별 LLM 팩토리 (Gemini/OpenAI/Anthropic)
+│   │   └── embedder.py             # Gemini 임베딩 클라이언트
 │   ├── db/
-│   │   ├── base.py                     # GraphDBInterface (ABC)
-│   │   ├── mock_db.py                  # MockGraphDB (개발/테스트용)
-│   │   ├── neo4j_db.py                 # Neo4jGraphDB (프로덕션)
-│   │   └── seed_data.py                # Mock 시드 데이터
+│   │   ├── base.py                 # GraphDBInterface (ABC)
+│   │   ├── neo4j_db.py             # Neo4j 구현체 (프로덕션)
+│   │   └── session_store.py        # PostgreSQL 세션 CRUD (psycopg-pool)
 │   ├── graph/
-│   │   ├── state.py                    # OrdinanceBuilderState (TypedDict)
-│   │   ├── workflow.py                 # LangGraph 그래프 조립 및 컴파일
-│   │   ├── nodes/
-│   │   │   ├── intent_analyzer.py      # 자연어 입력 → 필드 추출
-│   │   │   ├── interviewer.py          # 누락 필드 반복 질문
-│   │   │   ├── graph_retriever.py      # DB 법적 근거·유사 조례 검색
-│   │   │   ├── article_planner.py      # 조항 구성 계획 (9개 템플릿)
-│   │   │   ├── article_interviewer.py  # 조항별 세부 내용 Q&A
-│   │   │   ├── drafting_agent.py       # 법적 조문 초안 생성
-│   │   │   ├── draft_reviewer.py       # AI 자체 검토 및 수정
-│   │   │   ├── legal_checker.py        # 상위법 충돌 검증
-│   │   │   └── _article_examples.py   # 조항 예시 헬퍼
-│   │   └── edges/
-│   │       └── conditions.py           # 조건부 분기 함수 (5개)
-│   └── prompts/                        # LLM 프롬프트 템플릿
-│       ├── intent_analyzer.py
-│       ├── drafting_agent.py
-│       ├── draft_reviewer.py
-│       └── legal_checker.py
+│   │   ├── state.py                # OrdinanceBuilderState (TypedDict)
+│   │   ├── workflow.py             # LangGraph 조립 + 싱글톤
+│   │   ├── nodes/                  # 8개 노드 구현 (모두 async def)
+│   │   └── edges/conditions.py     # 5개 조건부 분기 함수
+│   └── prompts/                    # LLM 프롬프트 템플릿
 │
-├── pipeline/                           # 국가법령정보센터 → Neo4j ETL (독립 모듈)
-│   ├── config.py                       # 도메인 키워드·필수 법령 설정
-│   ├── api/
-│   │   └── law_api_client.py           # Open API 호출 + XML 파싱
-│   ├── transform/
-│   │   └── schema_mapper.py            # API 응답 → Graph 스키마 변환
-│   ├── loaders/
-│   │   └── neo4j_loader.py             # Neo4j MERGE 적재 + 임베딩
-│   ├── sync/
-│   │   └── change_detector.py          # enforcement_date 비교로 개정 감지
+├── pipeline/                       # 국가법령정보센터 → Neo4j ETL
+│   ├── api/law_api_client.py       # Open API 호출 + XML 파싱
+│   ├── transform/schema_mapper.py  # API 응답 → Graph 스키마 변환
+│   ├── loaders/neo4j_loader.py     # MERGE 적재 + 임베딩
+│   ├── sync/change_detector.py     # enforcement_date 비교 증분 업데이트
 │   └── scripts/
-│       ├── initial_load.py             # 최초 전체 적재 (4단계)
-│       ├── incremental_update.py       # 주기적 증분 업데이트
-│       └── migrate_schema.py           # 스키마 마이그레이션
+│       ├── initial_load.py         # 최초 4단계 전체 적재
+│       ├── type_load.py            # 조례 유형별 추가 적재
+│       ├── embed_ordinances.py     # 미임베딩 Ordinance 선택적 임베딩
+│       └── incremental_update.py   # 주기적 증분 업데이트
 │
-├── frontend/                           # React 18 + TypeScript (Vite)
-│   └── src/
-│       ├── App.tsx                     # 메인 앱 (상태 관리, 탭 전환)
-│       ├── api.ts                      # FastAPI 연동 클라이언트
-│       ├── types.ts                    # TypeScript 타입 정의
-│       └── components/
-│           ├── ChatWindow.tsx          # 메시지 목록 + 입력 필드
-│           ├── MessageBubble.tsx       # 개별 메시지 버블
-│           ├── StageIndicator.tsx      # 진행 단계 표시
-│           ├── DraftModal.tsx          # 초안 편집 + 검증 모달
-│           ├── DraftPanel.tsx          # 확정 초안 표시
-│           ├── LegalIssuesPanel.tsx    # 법률 이슈 목록 (severity 색상 코딩)
-│           └── SimilarOrdinancesPanel.tsx # 유사 조례 참고
+├── frontend/src/
+│   ├── App.tsx                     # 상태 관리, 인증, 뷰 전환
+│   ├── components/
+│   │   ├── ChatWindow.tsx
+│   │   ├── DraftModal.tsx          # 초안 편집 + 법률 검증 요청
+│   │   ├── ArticleItemsModal.tsx   # 조문별 세부 입력 (일괄 제출 지원)
+│   │   ├── QAPanel.tsx             # GraphRAG 법령 Q&A 슬라이딩 패널
+│   │   ├── LegalIssuesPanel.tsx    # 법률 이슈 severity 색상 코딩
+│   │   ├── LoadingModal.tsx        # API 호출 중 오버레이
+│   │   └── OnboardingWizard.tsx    # 첫 방문 사용자 안내
+│   └── api.ts                      # FastAPI 연동 클라이언트
 │
-├── docker-compose.yml                  # Neo4j + Backend + Frontend
-├── Dockerfile                          # Backend 이미지
-├── requirements.txt                    # Python 의존성
-├── ordinance.rdf                       # OWL 온톨로지 (선택)
-└── .env.example                        # 환경 변수 템플릿
+├── docker-compose.yml              # postgres + neo4j + backend + frontend
+├── Dockerfile
+├── requirements.txt
+└── ordinance.rdf                   # OWL 온톨로지
 ```
 
 ---
 
-## 기술 스택
+## API 엔드포인트
 
-| 계층 | 기술 | 역할 |
-|------|------|------|
-| **LLM (정보 추출)** | Gemini 2.5 Pro (`langchain-google-genai`) | `intent_analyzer` — 한국어 구조화 추출 |
-| **LLM (초안 생성·검토)** | Claude Opus 4.6 (`langchain-anthropic`) | `drafting_agent`, `draft_reviewer` — 장문 법적 문서 작성·수정 |
-| **LLM (법률 검증)** | GPT-4o (`langchain-openai`) | `legal_checker` — 비판적 법률 분석·충돌 검증 |
-| **Embedding** | `models/gemini-embedding-001` (3072d) | 조문 의미 검색 (Neo4j 벡터 인덱스 고정) |
-| **Orchestration** | LangGraph + LangChain | 상태 기반 멀티노드 워크플로우 |
-| **Backend** | FastAPI + Uvicorn | REST API 서버 |
-| **Frontend** | React 18 + TypeScript + Vite | 대화형 UI |
-| **Graph DB** | Neo4j 5.23 (Docker) → Neo4j AuraDB (프로덕션) | 법령 관계 그래프 |
-| **ETL** | 국가법령정보센터 Open API + 자체 파이프라인 | 법령·조례 데이터 수집 |
-| **배포** | Docker Compose (로컬) / Cloud Functions + AuraDB (예정) | 컨테이너 기반 배포 |
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| `GET` | `/api/v1/sessions` | 세션 목록 조회 |
+| `POST` | `/api/v1/session` | 세션 생성 (첫 메시지 포함) |
+| `GET` | `/api/v1/session/{id}` | 세션 상태 복원 |
+| `DELETE` | `/api/v1/session/{id}` | 세션 삭제 (소유자 검증) |
+| `POST` | `/api/v1/session/{id}/chat` | 대화 계속 |
+| `POST` | `/api/v1/session/{id}/articles_batch` | 조문 일괄 제출 |
+| `POST` | `/api/v1/session/{id}/finalize` | 초안 확정 |
+| `POST` | `/api/v1/session/{id}/qa` | GraphRAG 법령 Q&A |
+
+---
+
+## 로컬 실행
+
+### 1. 환경변수 설정
+
+```bash
+cp .env.example .env
+```
+
+| 변수 | 역할 |
+|------|------|
+| `GOOGLE_API_KEY` | Gemini LLM + Embedding |
+| `ANTHROPIC_API_KEY` | Claude (초안 생성·검토) |
+| `OPENAI_API_KEY` | GPT-4o (법률 검증) |
+| `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | 그래프 DB |
+| `POSTGRES_PASSWORD` | PostgreSQL |
+| `FIREBASE_CREDENTIALS_PATH` | 서버사이드 Firebase 인증 |
+
+### 2. Docker Compose 시작
+
+```bash
+docker compose up -d
+docker logs ordinance_builder-backend-1 -f
+# "Application startup complete" 확인 후 http://localhost:3000 접속
+```
+
+### 3. ETL 파이프라인 실행 (최초 1회)
+
+```bash
+pip install -r pipeline/requirements.txt
+python -m pipeline.scripts.initial_load
+```
+
+---
+
+## 배포
+
+```bash
+# 백엔드 — GCP Cloud Run
+gcloud builds submit --tag gcr.io/ordinance-builder-b9f6c/backend
+gcloud run deploy ordinance-backend \
+  --image gcr.io/ordinance-builder-b9f6c/backend \
+  --set-env-vars "CORS_ORIGINS=https://ordinance-builder-b9f6c.web.app"
+
+# 프론트엔드 — Firebase Hosting
+cd frontend && npm run build
+firebase deploy --only hosting
+```
+
+---
+
+## 핵심 설계 결정
+
+| 결정 | 이유 |
+|------|------|
+| **노드별 LLM 분리** (Gemini/Claude/GPT-4o) | 각 태스크 특성에 최적화 — 한국어 추출·장문 생성·비판적 분석 역할 분리 |
+| **interrupt 없는 인터뷰 루프** | 체크포인트 재진입 방식으로 LangGraph 복잡도 제거, 상태 일관성 보장 |
+| **GraphDBInterface 추상화** (ABC) | Mock ↔ Neo4j ↔ AuraDB 교체를 코드 변경 없이 환경변수로 제어 |
+| **모든 LLM 노드 async** | FastAPI async 워커 블로킹 방지 — 수십 초 LLM 응답 중 동시 요청 처리 가능 |
+| **PostgreSQL 커넥션 풀** (psycopg-pool) | Cloud Run 부하 시 매 요청 신규 연결 생성 방지 |
+| **CORS_ORIGINS를 str 타입** | pydantic-settings v2의 `list[str]` JSON 디코딩 우회 — Cloud Run 배포 안정성 확보 |
+| **signInWithRedirect** | COOP 정책으로 signInWithPopup 차단 → 리다이렉트 방식으로 전환 |
+| **AuraDB authDomain=web.app** | Chrome 120+ Bounce Tracking 방지 기능 우회 — firebaseapp.com 저장소 삭제 문제 해결 |
