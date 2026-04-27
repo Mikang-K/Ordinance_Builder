@@ -306,8 +306,9 @@ class Neo4jGraphDB(GraphDBInterface):
         SKIP_PROVISION_EMBEDDING=true) — callers must handle gracefully.
         """
         query = """
-        CALL db.index.vector.queryNodes('idx_provision_embedding', $limit, $embedding)
-        YIELD node AS p, score
+        MATCH (p:Provision)
+        WHERE p.embedding IS NOT NULL
+        WITH p, vector.similarity.cosine(p.embedding, $embedding) AS score
         MATCH (s:Statute)-[:CONTAINS]->(p)
         RETURN DISTINCT
                s.id           AS statute_id,
@@ -333,8 +334,9 @@ class Neo4jGraphDB(GraphDBInterface):
     ) -> list[dict[str, Any]]:
         """Semantic search over Ordinance nodes via idx_ordinance_embedding."""
         query = """
-        CALL db.index.vector.queryNodes('idx_ordinance_embedding', $limit, $embedding)
-        YIELD node AS o, score
+        MATCH (o:Ordinance)
+        WHERE o.embedding IS NOT NULL
+        WITH o, vector.similarity.cosine(o.embedding, $embedding) AS score
         RETURN o.id          AS ordinance_id,
                o.region_name AS region_name,
                o.title       AS title,

@@ -1352,5 +1352,47 @@ python -m pipeline.scripts.embed_ordinances
 
 ---
 
+### 26. Neo4j 벡터 쿼리 API 변경 — `db.index.vector.queryNodes` → `vector.similarity.cosine` (2026-04-27)
+
+**증상**: Neo4j 5.23+ 에서 GQL 상태 코드 `01N01` 경고 발생:
+
+```
+db.index.vector.queryNodes is deprecated. It is replaced by SEARCH.
+Use CYPHER 25 for the new query plan.
+```
+
+**원인**: Neo4j 5.23 이상에서 `CALL db.index.vector.queryNodes(indexName, k, embedding)`가 deprecated됨.
+신규 권장 방식은 `vector.similarity.cosine(node.embedding, $embedding)`로 직접 유사도를 계산하는 인라인 패턴.
+
+**수정 파일 (7곳)**:
+
+| 파일 | 쿼리 위치 |
+|------|-----------|
+| `pipeline/loaders/neo4j_loader.py` | `_VECTOR_SIMILAR_TO` (SIMILAR_TO 관계 구축) |
+| `app/db/neo4j_db.py` | `find_legal_basis` provision fallback, `find_similar_ordinances` vector, `vector_search_provisions`, `vector_search_ordinances` |
+| `app/api/routers/debug.py` | `/debug/vector` Ordinance 쿼리, Provision 쿼리 |
+| `app/db/base.py` | 독스트링 Cypher 예시 |
+
+**새 패턴**:
+```cypher
+-- Before (deprecated)
+CALL db.index.vector.queryNodes('idx_ordinance_embedding', $limit, $embedding)
+YIELD node AS o, score
+
+-- After (권장)
+MATCH (o:Ordinance)
+WHERE o.embedding IS NOT NULL
+WITH o, vector.similarity.cosine(o.embedding, $embedding) AS score
+ORDER BY score DESC
+LIMIT $limit
+```
+
+**체크리스트**:
+- 새 벡터 유사도 쿼리 작성 시 `db.index.vector.queryNodes` 대신 `vector.similarity.cosine()` 사용
+- `CALL db.index.vector.queryNodes` 패턴은 코드베이스에서 완전히 제거됨 (grep으로 확인 가능)
+- `WHERE node.embedding IS NOT NULL` 조건 필수 (NULL 임베딩 노드 제외)
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.

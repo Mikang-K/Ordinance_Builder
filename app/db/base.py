@@ -132,10 +132,11 @@ class GraphDBInterface(ABC):
         Semantic search over Provision nodes using a pre-computed embedding.
 
         Neo4j Cypher equivalent:
-            CALL db.index.vector.queryNodes('idx_provision_embedding', $limit, $embedding)
-            YIELD node AS p, score
+            MATCH (p:Provision) WHERE p.embedding IS NOT NULL
+            WITH p, vector.similarity.cosine(p.embedding, $embedding) AS score
             MATCH (s:Statute)-[:CONTAINS]->(p)
             RETURN s.id, s.title, p.article_no, p.content_text, 'VECTOR_MATCH', score
+            ORDER BY score DESC LIMIT $limit
 
         Returns list of dicts with keys:
             statute_id, statute_title, provision_article,
@@ -153,9 +154,10 @@ class GraphDBInterface(ABC):
         Semantic search over Ordinance nodes using a pre-computed embedding.
 
         Neo4j Cypher equivalent:
-            CALL db.index.vector.queryNodes('idx_ordinance_embedding', $limit, $embedding)
-            YIELD node AS o, score
+            MATCH (o:Ordinance) WHERE o.embedding IS NOT NULL
+            WITH o, vector.similarity.cosine(o.embedding, $embedding) AS score
             RETURN o.id, o.region_name, o.title, score, '벡터 유사도 기반 추천'
+            ORDER BY score DESC LIMIT $limit
 
         Returns list of dicts with keys:
             ordinance_id, region_name, title,

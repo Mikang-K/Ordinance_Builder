@@ -77,12 +77,13 @@ def debug_vector(
                 dict(r)
                 for r in session.run(
                     """
-                    CALL db.index.vector.queryNodes('idx_ordinance_embedding', $limit, $embedding)
-                    YIELD node AS o, score
-                    WHERE o.region_name <> $region
+                    MATCH (o:Ordinance)
+                    WHERE o.embedding IS NOT NULL AND o.region_name <> $region
+                    WITH o, vector.similarity.cosine(o.embedding, $embedding) AS score
                     RETURN o.id AS id, o.title AS title, o.region_name AS region_name,
                            score AS similarity_score
                     ORDER BY score DESC
+                    LIMIT $limit
                     """,
                     embedding=embedding,
                     region=region,
@@ -95,13 +96,15 @@ def debug_vector(
                 dict(r)
                 for r in session.run(
                     """
-                    CALL db.index.vector.queryNodes('idx_provision_embedding', $limit, $embedding)
-                    YIELD node AS p, score
+                    MATCH (p:Provision)
+                    WHERE p.embedding IS NOT NULL
+                    WITH p, vector.similarity.cosine(p.embedding, $embedding) AS score
                     MATCH (s:Statute)-[:CONTAINS]->(p)
                     RETURN p.id AS id, p.article_no AS article_no,
                            s.title AS statute_title, score AS similarity_score,
                            left(p.content_text, 120) AS content_preview
                     ORDER BY score DESC
+                    LIMIT $limit
                     """,
                     embedding=embedding,
                     limit=limit,
