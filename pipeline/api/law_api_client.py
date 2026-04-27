@@ -414,14 +414,23 @@ class LawApiClient:
         The law.go.kr server occasionally drops the first keep-alive connection.
         extra_headers overrides session-level headers for this request only.
         """
-        for attempt in (1, 2):
+        for attempt in (1, 2, 3):
             try:
-                return self._session.get(
+                resp = self._session.get(
                     url, params=params, timeout=30, headers=extra_headers or {}
                 )
+                # Retry on transient server errors (502/503/504)
+                if resp.status_code in (502, 503, 504) and attempt < 3:
+                    logger.warning(
+                        "HTTP %s on attempt %d for %s — retrying in %ds…",
+                        resp.status_code, attempt, url.split("?")[0], attempt * 2,
+                    )
+                    time.sleep(attempt * 2)
+                    continue
+                return resp
             except requests.exceptions.ConnectionError as exc:
-                if attempt == 1 and "ConnectionResetError" in str(exc):
-                    logger.warning("Connection reset on attempt 1, retrying…")
+                if attempt < 3 and "ConnectionResetError" in str(exc):
+                    logger.warning("Connection reset on attempt %d, retrying…", attempt)
                     time.sleep(1)
                     continue
                 logger.error("API request failed: %s – %s", url, exc)
@@ -517,6 +526,12 @@ class LawApiClient:
             root = ET.fromstring(resp.content)
             logger.info("XML ok (detail_link): root=<%s> provisions=%d", root.tag, len(root.findall(".//조문단위")))
             return root
+        except requests.exceptions.HTTPError as exc:
+            logger.warning(
+                "HTTP error (detail_link). status=%s finalURL=%s error=%s — skipping",
+                resp.status_code, resp.url, exc,
+            )
+            return None
         except ET.ParseError as exc:
             logger.error(
                 "XML parse failed (detail_link). status=%s finalURL=%s error=%s body=%s",

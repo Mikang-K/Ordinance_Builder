@@ -1394,5 +1394,40 @@ LIMIT $limit
 
 ---
 
+### 27. 법령 API 502 Bad Gateway — `_get_xml_by_link` 스크립트 전체 중단 (2026-04-28)
+
+**증상**: `type_load.py` 실행 중 특정 조례 MST 요청 시 스크립트가 중단됨:
+
+```
+requests.exceptions.HTTPError: 502 Server Error: Bad Gateway
+  for url: http://www.law.go.kr/DRF/lawService.do?...&MST=1403111&type=XML
+```
+
+**원인**: `_get_xml_by_link`가 `resp.raise_for_status()`로 HTTP 오류를 올리지만
+`ET.ParseError`만 except로 잡아 `HTTPError`가 `_load_type` 루프까지 전파되어 적재 스크립트 전체 중단.
+
+**수정 파일**: `pipeline/api/law_api_client.py`
+
+1. `_get_xml_by_link` — `requests.exceptions.HTTPError` 추가 catch → `None` 반환 (스킵):
+   ```python
+   except requests.exceptions.HTTPError as exc:
+       logger.warning("HTTP error (detail_link). status=%s ... — skipping")
+       return None
+   ```
+
+2. `_request` — 5xx 전이 오류(502/503/504) 재시도 로직 추가 (최대 3회, 지수 backoff):
+   ```python
+   if resp.status_code in (502, 503, 504) and attempt < 3:
+       time.sleep(attempt * 2)
+       continue
+   ```
+
+**체크리스트**:
+- 특정 MST 요청이 502를 반환해도 해당 건만 `warning` 로그를 남기고 나머지 적재를 계속함
+- `_request`는 502/503/504에서 2초·4초 대기 후 재시도하므로 일시적 서버 오류는 자동 복구됨
+- 재시도 후에도 5xx이면 `raise_for_status()` → `HTTPError` → `_get_xml_by_link`에서 catch → `None` 반환
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.
