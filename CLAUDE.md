@@ -1293,5 +1293,64 @@ except Exception as e:
 
 ---
 
+### 25. AuraDB 조례 유형 확장 — pipeline 스크립트 추가 (2026-04-26)
+
+**배경**: AuraDB에 지원 조례 관련 데이터만 있어 설치·운영 / 관리·규제 / 복지·서비스 조례 작성 시
+`graph_retriever`가 유사 조례·법령 근거를 제공하지 못함.
+
+**추가/수정 파일 (3곳)**:
+
+1. `pipeline/config.py` — 신규 필드 2개 추가:
+   ```python
+   # 유형별 키워드 (type_load.py에서 사용)
+   ordinance_type_keywords: dict[str, list[str]]  # 지원/설치·운영/관리·규제/복지·서비스
+
+   # 유형별 필수 법령 (type_load.py Phase 1에서 강제 적재)
+   mandatory_statutes_by_type: dict[str, list[str]]
+   ```
+   기존 `domain_keywords` / `mandatory_statutes`는 변경 없음 (`incremental_update.py` 호환 유지).
+
+2. `pipeline/scripts/type_load.py` — 신규:
+   - `--type 설치·운영 | 관리·규제 | 복지·서비스 | all` 인자로 유형별 선택 적재
+   - 4단계: Phase 1 필수법령 → Phase 2 키워드 법령 → Phase 3 키워드 조례 → Phase 4 관계 구축
+   - `SKIP_PROVISION_EMBEDDING=true` 내부 기본 적용 (AuraDB 8GB 보호)
+   - MERGE idempotent — 중단 후 재실행 안전
+
+3. `pipeline/scripts/embed_ordinances.py` — 신규:
+   - AuraDB의 미임베딩 Ordinance 노드만 선택적 임베딩 (Provision 제외)
+   - `--type` 옵션으로 특정 유형만 임베딩 가능
+   - `--dry-run`으로 건수·예상 시간·비용 확인 후 대화형 확인(y/N)
+   - 배치 20건/요청, 1s 딜레이 (rate limit 준수)
+
+**적재 실행 순서 (PowerShell — 2일 분할)**:
+
+```powershell
+# Day 1
+$env:SKIP_PROVISION_EMBEDDING = "true"
+$env:NEO4J_URI = "neo4j+s://da425acb.databases.neo4j.io"
+$env:NEO4J_PASSWORD = "<password>"
+$env:GOOGLE_API_KEY = "<key>"
+$env:LAW_API_KEY = "<key>"
+
+python -m pipeline.scripts.type_load --type 설치·운영
+# 30분 대기
+python -m pipeline.scripts.type_load --type 관리·규제
+
+# Day 2
+python -m pipeline.scripts.type_load --type 복지·서비스
+python -m pipeline.scripts.embed_ordinances --dry-run  # 건수 확인
+python -m pipeline.scripts.embed_ordinances
+```
+
+> **주의**: bash 방식(`VAR=value python ...`)은 PowerShell에서 동작하지 않음.
+> 반드시 `$env:VAR = "value"` 방식으로 환경변수를 설정한 후 실행할 것.
+
+**체크리스트**:
+- 새 조례 유형 추가 시 `config.py`의 `ordinance_type_keywords` + `mandatory_statutes_by_type`에 항목 추가
+- 적재 전 Neo4j Aura 콘솔에서 인스턴스 Resume 상태 확인
+- API 일 10,000건 한도 → 유형별 분리 실행 필수
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.
