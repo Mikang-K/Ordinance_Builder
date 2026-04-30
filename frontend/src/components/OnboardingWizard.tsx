@@ -212,15 +212,19 @@ function buildMessage(type: string, fields: Record<string, string>): string {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
+  isOpen: boolean
+  onClose: () => void
   onStart: (message: string) => void
   isLoading: boolean
 }
 
-export default function OnboardingWizard({ onStart, isLoading }: Props) {
+export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }: Props) {
   const [selectedType, setSelectedType] = useState<string>('')
   const [stepIndex, setStepIndex] = useState(-1)   // -1 = type selection screen
   const [selections, setSelections] = useState<Record<string, string>>({})
   const [textInputs, setTextInputs] = useState<Record<string, string>>({})
+
+  if (!isOpen) return null
 
   const typeSteps = selectedType ? [REGION_STEP, ...(TYPE_STEPS[selectedType] ?? TYPE_STEPS['지원'])] : []
   const isTypeScreen = stepIndex === -1
@@ -280,23 +284,37 @@ export default function OnboardingWizard({ onStart, isLoading }: Props) {
 
   return (
     <div style={{
-      flex: 1,
+      position: 'fixed',
+      inset: 0,
+      zIndex: 100,
+      background: 'rgba(15,23,42,0.55)',
       display: 'flex',
-      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
       padding: '24px 16px',
-      background: '#f8fafc',
       overflowY: 'auto',
-    }}>
+    }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
       <div style={{
         width: '100%',
         maxWidth: '620px',
         background: '#ffffff',
         borderRadius: '16px',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+        boxShadow: '0 8px 40px rgba(0,0,0,0.25)',
         overflow: 'hidden',
+        position: 'relative',
       }}>
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: '12px', right: '12px',
+            width: '28px', height: '28px', borderRadius: '50%',
+            border: 'none', background: '#f1f5f9', cursor: 'pointer',
+            fontSize: '0.9rem', color: '#64748b', zIndex: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >✕</button>
         {/* Progress bar */}
         <div style={{ height: '4px', background: '#e2e8f0' }}>
           <div style={{
@@ -489,11 +507,8 @@ export default function OnboardingWizard({ onStart, isLoading }: Props) {
             {isLoading ? '생성 중...' : isTypeScreen ? '다음' : stepIndex < totalSteps - 1 ? '다음' : '조례 만들기 시작'}
           </button>
         </div>
-      </div>
+        </div>
 
-      <p style={{ marginTop: '20px', fontSize: '0.82rem', color: '#94a3b8', textAlign: 'center' }}>
-        모든 항목은 이후 대화에서 언제든지 변경할 수 있습니다
-      </p>
     </div>
   )
 }

@@ -57,11 +57,30 @@ async def lifespan(app: FastAPI):
       3. LangGraph 워크플로우 컴파일 및 싱글톤 등록
 
     앱 종료 시:
-      - AsyncPostgresSaver 연결 풀 정리 (context manager 자동 처리)
+      - AsyncPostgresSaver 커넥션 풀 정리
+
+    단일 AsyncConnection 대신 AsyncConnectionPool을 사용하는 이유:
+    - Cloud Run 유휴 시 PostgreSQL 서버가 TCP 연결을 끊으면
+      단일 연결은 재연결 없이 OperationalError("the connection is closed")가 발생
+    - AsyncConnectionPool은 요청마다 conn.connection()으로 연결을 획득하므로
+      끊긴 연결을 자동으로 교체해 reconnection 문제를 해결
     """
+    from psycopg.rows import dict_row
+    from psycopg_pool import AsyncConnectionPool
     from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-    async with AsyncPostgresSaver.from_conn_string(settings.POSTGRES_URL) as checkpointer:
+    pool = AsyncConnectionPool(
+        conninfo=settings.POSTGRES_URL,
+        min_size=1,
+        max_size=5,
+        kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        open=False,
+        max_idle=300,       # 5분 유휴 연결 교체 (Cloud Run idle timeout 대비)
+        max_lifetime=3600,  # 1시간마다 연결 교체 (누적 stale 방지)
+    )
+    await pool.open()
+    try:
+        checkpointer = AsyncPostgresSaver(conn=pool)
         try:
             await checkpointer.setup()      # langgraph_checkpoints 테이블 생성
         except Exception:
@@ -72,8 +91,9 @@ async def lifespan(app: FastAPI):
         try:
             yield
         finally:
-            await close_db()                # 커넥션 풀 정리
-    # context manager 종료 시 checkpointer 연결 풀 자동 정리
+            await close_db()                # sessions 커넥션 풀 정리
+    finally:
+        await pool.close()                  # checkpointer 커넥션 풀 정리
 
 
 app = FastAPI(

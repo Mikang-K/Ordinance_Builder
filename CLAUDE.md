@@ -1429,5 +1429,48 @@ requests.exceptions.HTTPError: 502 Server Error: Bad Gateway
 
 ---
 
+### 28. LangGraph 체크포인터 연결 끊김 — `the connection is closed` (2026-04-30)
+
+**증상**: Cloud Run에서 유휴 후 첫 요청 시 500 오류:
+
+```
+psycopg.OperationalError: the connection is closed
+  File "/app/app/api/routers/chat.py", line 188, in get_session_state
+    state_snapshot = await graph.aget_state(config)
+```
+
+**원인**: `AsyncPostgresSaver.from_conn_string()`(langgraph-checkpoint-postgres 3.0.5)이 **단일 `AsyncConnection`** 하나만 생성함. Cloud Run 유휴 시 PostgreSQL 서버가 TCP 연결을 끊으면, 이후 모든 체크포인터 호출이 끊긴 연결을 그대로 재사용해 오류 발생. 풀(pool)이 아니라 단일 연결이므로 자동 재연결 없음.
+
+**수정** (`app/main.py`):
+
+`AsyncPostgresSaver.from_conn_string()` 대신 `AsyncConnectionPool`을 직접 생성해서 주입:
+
+```python
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+pool = AsyncConnectionPool(
+    conninfo=settings.POSTGRES_URL,
+    min_size=1,
+    max_size=5,
+    kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+    open=False,
+    max_idle=300,       # 5분 유휴 연결 교체
+    max_lifetime=3600,  # 1시간마다 연결 교체
+)
+await pool.open()
+checkpointer = AsyncPostgresSaver(conn=pool)
+```
+
+`AsyncConnectionPool` 사용 시 `_ainternal.get_connection`이 `conn.connection()`으로 연결을 획득하므로, 끊긴 연결은 풀이 자동으로 교체함.
+
+**체크리스트**:
+- `from_conn_string()`은 단일 연결이라 Cloud Run 같은 환경에서 사용 금지
+- 새 환경(Cloud Run, GKE 등)에 배포 시 반드시 `AsyncConnectionPool` 기반으로 구성
+- `max_idle=300` (5분), `max_lifetime=3600` (1시간) 은 Cloud Run 기본 idle timeout보다 짧게 유지
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.

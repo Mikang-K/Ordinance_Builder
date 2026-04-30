@@ -84,13 +84,14 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   gap: 0;
 }
 
-/* Chat area */
-.chat-area {
+/* Chat area (legacy) / QA main area */
+.chat-area,
+.qa-main-area {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  border-right: 1px solid #e2e8f0;
+  overflow: hidden;
 }
 .chat-window {
   flex: 1;

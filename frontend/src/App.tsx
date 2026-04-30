@@ -1,12 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import type { ChatMessage, LegalIssue, QAMessage, SimilarOrdinance, Stage, SuggestedOption } from './types'
+import type { LegalIssue, QAMessage, SimilarOrdinance, Stage } from './types'
 import { createSession, sendMessage, finalizeSession, getSessionState, submitArticlesBatch } from './api'
 import { auth, loginWithGoogle, logout, onAuthStateChanged, getRedirectResult } from './firebase'
 import type { User } from './firebase'
 import StageIndicator from './components/StageIndicator'
-import ChatWindow from './components/ChatWindow'
 import DraftModal from './components/DraftModal'
-import SimilarOrdinancesPanel from './components/SimilarOrdinancesPanel'
 import SessionListScreen from './components/SessionListScreen'
 import ArticleItemsModal from './components/ArticleItemsModal'
 import LoadingModal from './components/LoadingModal'
@@ -58,8 +56,7 @@ export default function App() {
   // ──────────────────────────────────────────────────────────────────────────
 
   const [view, setView] = useState<'list' | 'chat'>('list')
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [input, setInput] = useState('')
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState<string | null>(null)
   const [stage, setStage] = useState<Stage | null>(null)
@@ -84,7 +81,6 @@ export default function App() {
   const [currentArticleKey, setCurrentArticleKey] = useState<string | null>(null)
   const [hideArticleModal, setHideArticleModal] = useState(false)
   // QA Panel State
-  const [isQAPanelOpen, setIsQAPanelOpen] = useState(false)
   const [qaHistory, setQaHistory] = useState<QAMessage[]>([])
   const [pendingQAContent, setPendingQAContent] = useState<string | null>(null)
   const [hasSession, setHasSession] = useState(false)
@@ -97,9 +93,6 @@ export default function App() {
     document.documentElement.style.fontSize = `${fontSize}px`
   }, [fontSize])
 
-  const appendMessage = (msg: ChatMessage) =>
-    setMessages((prev) => [...prev, msg])
-
   const applyResponse = (res: {
     stage: string
     message: string
@@ -110,11 +103,9 @@ export default function App() {
     similar_ordinances?: SimilarOrdinance[]
     article_queue?: string[]
     current_article_key?: string | null
-    suggested_options?: SuggestedOption[]
     ordinance_type?: string | null
   }) => {
     setStage(res.stage as Stage)
-    appendMessage({ role: 'ai', text: res.message, suggested_options: res.suggested_options })
 
     if (res.similar_ordinances && res.similar_ordinances.length > 0) {
       setSimilarOrdinances(res.similar_ordinances)
@@ -149,22 +140,15 @@ export default function App() {
     }
   }
 
-  const sendText = async (text: string) => {
-    if (!text.trim() || isLoading) return
-    setError(null)
-    appendMessage({ role: 'user', text })
+  const handleWizardStart = async (message: string) => {
+    setIsOnboardingOpen(false)
     setIsLoading(true)
-    setLoadingMessage(sessionIdRef.current ? 'AI가 응답을 준비 중입니다...' : '기본 정보를 분석하고 있습니다...')
+    setLoadingMessage('기본 정보를 분석하고 있습니다...')
     try {
-      if (!sessionIdRef.current) {
-        const res = await createSession(text)
-        sessionIdRef.current = res.session_id
-        setHasSession(true)
-        applyResponse({ ...res, is_complete: false })
-      } else {
-        const res = await sendMessage(sessionIdRef.current, text)
-        applyResponse(res)
-      }
+      const res = await createSession(message)
+      sessionIdRef.current = res.session_id
+      setHasSession(true)
+      applyResponse({ ...res, is_complete: false })
     } catch (e) {
       setError(e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.')
     } finally {
@@ -173,24 +157,10 @@ export default function App() {
     }
   }
 
-  const handleSend = async () => {
-    const text = input.trim()
-    if (!text) return
-    setInput('')
-    await sendText(text)
-  }
-
-  const handleOptionSelect = (value: string) => {
-    if (isLoading || isArticleModalOpen) return
-    setInput('')
-    sendText(value)
-  }
-
   const handleLegalReview = async (editedDraft: string) => {
     if (!sessionIdRef.current || isLoading) return
 
     setError(null)
-    appendMessage({ role: 'user', text: '법률 검증을 요청합니다.' })
     setIsLoading(true)
     setLoadingMessage('법률 조항을 검증하고 있습니다...')
 
@@ -218,7 +188,6 @@ export default function App() {
       setFinalLegalIssues(res.legal_issues?.length ? res.legal_issues : null)
       setIsDraftModalOpen(false)
       setStage('completed')
-      appendMessage({ role: 'ai', text: '조례 초안이 확정되었습니다.' })
       setIsCompletedDraftModalOpen(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : '확정 중 오류가 발생했습니다.')
@@ -228,16 +197,8 @@ export default function App() {
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
-    }
-  }
-
   const resetState = () => {
     sessionIdRef.current = null
-    setMessages([])
     setStage(null)
     setPendingDraft(null)
     setIsDraftModalOpen(false)
@@ -250,13 +211,11 @@ export default function App() {
     setArticleQueue([])
     setCurrentArticleKey(null)
     setHideArticleModal(false)
-    setIsQAPanelOpen(false)
     setQaHistory([])
     setPendingQAContent(null)
     setHasSession(false)
     setOrdinanceType(null)
     setError(null)
-    setInput('')
   }
 
   const handleReset = () => {
@@ -267,6 +226,7 @@ export default function App() {
   const handleNewSession = () => {
     resetState()
     setView('chat')
+    setIsOnboardingOpen(true)
   }
 
   const handleSelectSession = async (sessionId: string) => {
@@ -276,7 +236,6 @@ export default function App() {
       resetState()
       sessionIdRef.current = state.session_id
       setHasSession(true)
-      setMessages(state.messages)
       setStage(state.stage as Stage)
 
       if (state.similar_ordinances && state.similar_ordinances.length > 0) {
@@ -426,15 +385,17 @@ export default function App() {
               확정 초안 보기
             </button>
           )}
-          {hasSession && (
-            <button
-              onClick={() => setIsQAPanelOpen(true)}
-              title="법령 Q&A 패널 열기"
-              style={{ padding: '6px 14px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}
-            >
-              🔍 질문
-            </button>
-          )}
+          <button
+            onClick={() => {
+              if (hasSession && window.confirm('현재 진행 중인 조례 작업이 있습니다. 새로 시작하시겠습니까?')) {
+                resetState()
+              }
+              setIsOnboardingOpen(true)
+            }}
+            style={{ padding: '6px 14px', background: '#1e40af', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}
+          >
+            ✚ 새 조례 만들기
+          </button>
           <button className="reset-btn" onClick={handleReset}>목록</button>
           <div style={userInfoStyle}>
             {user.photoURL && (
@@ -451,16 +412,19 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        <div className="chat-area">
-          {messages.length === 0 && !isLoading && !hasSession ? (
-            <OnboardingWizard onStart={sendText} isLoading={isLoading} />
-          ) : (
-          <ChatWindow messages={messages} isLoading={isLoading} onOptionSelect={handleOptionSelect} />
-          )}
-
-          {similarOrdinances.length > 0 && (
-            <SimilarOrdinancesPanel ordinances={similarOrdinances} />
-          )}
+        <div className="qa-main-area">
+          <QAPanel
+            sessionId={sessionIdRef.current}
+            stage={stage}
+            currentArticleKey={currentArticleKey}
+            qaHistory={qaHistory}
+            onAddMessages={(msgs) => setQaHistory((prev) => [...prev, ...msgs])}
+            onApplyContent={(content) => {
+              setPendingQAContent(content)
+              if (isArticleModalOpen && hideArticleModal) setHideArticleModal(false)
+            }}
+            fontSize={fontSize}
+          />
 
           {error && (
             <div className="error-bar">
@@ -468,40 +432,7 @@ export default function App() {
               <button onClick={() => setError(null)}>✕</button>
             </div>
           )}
-
-          {!hasSession && messages.length === 0 && !isLoading ? null : isArticleModalOpen && hideArticleModal ? (
-            <div className="input-area" style={{ justifyContent: 'center', background: '#f8fafc', padding: '20px' }}>
-              <button
-                onClick={() => setHideArticleModal(false)}
-                style={{ padding: '14px 28px', background: '#1e40af', color: 'white', borderRadius: '12px', fontSize: '1rem', fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(30, 64, 175, 0.3)', transition: 'transform 0.1s' }}
-                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-              >
-                👉 상세 조항 계속 작성하기 (모달 열기)
-              </button>
-            </div>
-          ) : (
-            <div className="input-area">
-              <textarea
-                className="message-input"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={isArticleModalOpen ? "상세 항목 모달에서 입력을 완료해 주세요." : "메시지를 입력하세요... (Shift+Enter로 줄바꿈)"}
-                rows={2}
-                disabled={isLoading || isArticleModalOpen}
-              />
-              <button
-                className="send-btn"
-                onClick={handleSend}
-                disabled={!input.trim() || isLoading || isArticleModalOpen}
-              >
-                전송
-              </button>
-            </div>
-          )}
         </div>
-
       </main>
 
       {isDraftModalOpen && pendingDraft && (
@@ -527,24 +458,15 @@ export default function App() {
           similarOrdinances={similarOrdinances}
           pendingQAContent={pendingQAContent}
           onQAContentApplied={() => setPendingQAContent(null)}
-          onOpenQA={() => setIsQAPanelOpen(true)}
+          onOpenQA={() => {/* QA panel is always visible */}}
         />
       )}
 
-      <QAPanel
-        isOpen={isQAPanelOpen}
-        onClose={() => setIsQAPanelOpen(false)}
-        sessionId={sessionIdRef.current}
-        stage={stage}
-        currentArticleKey={currentArticleKey}
-        qaHistory={qaHistory}
-        onAddMessages={(msgs) => setQaHistory((prev) => [...prev, ...msgs])}
-        onApplyContent={(content) => {
-          setPendingQAContent(content)
-          setIsQAPanelOpen(false)
-          if (isArticleModalOpen && hideArticleModal) setHideArticleModal(false)
-        }}
-        fontSize={fontSize}
+      <OnboardingWizard
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+        onStart={handleWizardStart}
+        isLoading={isLoading}
       />
 
       {isCompletedDraftModalOpen && completedDraft && (
