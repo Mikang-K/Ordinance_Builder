@@ -1,5 +1,9 @@
+import logging
+
 from app.db.base import GraphDBInterface
 from app.graph.state import OrdinanceBuilderState
+
+logger = logging.getLogger(__name__)
 
 
 def graph_retriever_node(
@@ -27,20 +31,29 @@ def graph_retriever_node(
     region: str = info.get("region", "")
     support_type: str = info.get("support_type", "")
 
-    legal_basis = db.find_legal_basis(keywords=keywords, support_type=support_type)
-    similar_ordinances = db.find_similar_ordinances(
-        region=region,
-        keywords=keywords,
-        limit=5,
-    )
+    legal_basis: list[dict] = []
+    similar_ordinances: list[dict] = []
+    article_examples: list[dict] = []
+    legal_terms: list[dict] = []
 
-    # Pre-fetch provisions from similar ordinances so article_interviewer can
-    # surface per-article examples without additional DB round-trips.
-    ordinance_ids = [o["ordinance_id"] for o in similar_ordinances]
-    article_examples = db.get_similar_ordinance_provisions(ordinance_ids=ordinance_ids)
+    try:
+        legal_basis = db.find_legal_basis(keywords=keywords, support_type=support_type)
+        similar_ordinances = db.find_similar_ordinances(
+            region=region,
+            keywords=keywords,
+            limit=5,
+        )
 
-    # Fetch LegalTerm definitions for key terms — used in drafting and legal review.
-    legal_terms = db.find_legal_terms(keywords=keywords)
+        # Pre-fetch provisions from similar ordinances so article_interviewer can
+        # surface per-article examples without additional DB round-trips.
+        ordinance_ids = [o["ordinance_id"] for o in similar_ordinances]
+        article_examples = db.get_similar_ordinance_provisions(ordinance_ids=ordinance_ids)
+
+        # Fetch LegalTerm definitions for key terms — used in drafting and legal review.
+        legal_terms = db.find_legal_terms(keywords=keywords)
+
+    except Exception as e:
+        logger.warning("Graph DB 검색 실패 — 빈 결과로 계속 진행: %s", e)
 
     return {
         "legal_basis": legal_basis,
