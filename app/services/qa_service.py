@@ -13,12 +13,32 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.core.embedder import get_embedder
 from app.db.base import GraphDBInterface
-from app.prompts.qa_agent import QA_SYSTEM, QAOutput, build_qa_human_direct
+from app.prompts.qa_agent import (
+    QA_SYSTEM, QAOutput, SearchDecision,
+    ROUTER_SYSTEM, build_router_human, build_qa_human_direct,
+)
 
 if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+
+async def _route_question(question: str, llm) -> SearchDecision:
+    """질문이 DB 검색을 필요로 하는지 LLM으로 판단한다. 오류 시 검색 필요로 fallback."""
+    try:
+        router_llm = llm.with_structured_output(SearchDecision)
+        decision: SearchDecision = await router_llm.ainvoke(
+            [
+                {"role": "system", "content": ROUTER_SYSTEM},
+                {"role": "user", "content": build_router_human(question)},
+            ]
+        )
+        logger.info("QA 라우팅 결과: needs_search=%s, reason=%s", decision.needs_search, decision.reason)
+        return decision
+    except Exception:
+        logger.warning("QA 라우터 실패 — DB 검색 경로로 fallback")
+        return SearchDecision(needs_search=True, reason="router_error_fallback")
 
 
 async def direct_search_qa(
@@ -27,17 +47,19 @@ async def direct_search_qa(
     llm,
 ) -> tuple[QAOutput, list[dict], list[dict], list[dict]]:
     """
-    질문 텍스트를 임베딩하여 Neo4j 전체 DB를 벡터 검색한 뒤 LLM 답변을 생성합니다.
+    질문 유형을 LLM으로 먼저 분류한 뒤, 필요한 경우에만 Neo4j 벡터 검색을 수행합니다.
 
     Returns:
         (QAOutput, legal_basis, legal_terms, similar_ordinances)
-        DB 오류 시 빈 리스트와 함께 LLM 단독 답변(degraded mode)을 반환합니다.
+        DB 오류 또는 라우터 오류 시 안전 fallback으로 기존 경로를 유지합니다.
     """
     legal_basis: list[dict] = []
     legal_terms: list[dict] = []
     similar_ordinances: list[dict] = []
 
-    if db:
+    decision = await _route_question(question, llm)
+
+    if db and decision.needs_search:
         try:
             embedding: list[float] = await asyncio.to_thread(
                 get_embedder().embed_query, question

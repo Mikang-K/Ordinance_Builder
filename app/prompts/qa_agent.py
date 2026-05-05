@@ -3,11 +3,39 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class SearchDecision(BaseModel):
+    """LLM 라우터 출력 — DB 검색 필요 여부 판단."""
+    needs_search: bool
+    reason: str
+
+
 class QAOutput(BaseModel):
     """LangChain structured output for GraphRAG Q&A."""
     answer: str
     applicable_content: Optional[str] = None
     applicable_article_key: Optional[str] = None
+
+
+ROUTER_SYSTEM = """당신은 법령 Q&A 시스템의 검색 라우터입니다.
+사용자 질문이 법령·조례 데이터베이스 검색이 필요한지 판단하세요.
+
+검색이 필요한 경우 (needs_search: true):
+- 특정 법령명·조항번호 조회 ("청년기본법 제3조", "지방자치법 위임 범위")
+- 조례 작성 기준·요건 질문 ("지원금 상한선 어떻게 설정?", "처벌 조항 어떻게 써?")
+- 상위법 충돌·합법성 검토 ("이 조항이 법률에 위반되나?")
+- 타 지자체 유사 조례 사례 요청 ("다른 시군구 청년 지원 조례 예시")
+- 법률 용어 정의 요청 ("보조금이란?", "처분이란?")
+
+검색이 불필요한 경우 (needs_search: false):
+- 인사·감사·일상 대화 ("안녕하세요", "감사합니다", "수고하세요")
+- 이전 답변 심화 요청 ("더 자세히 설명해줘", "예시를 들어줘", "요약해줘")
+- 앱 기능 문의 ("이 패널에서 뭘 할 수 있어요?")
+- 판단 불확실 시: needs_search를 true로 설정 (안전 우선)
+"""
+
+
+def build_router_human(question: str) -> str:
+    return f"[질문]\n{question}"
 
 
 QA_SYSTEM = """당신은 대한민국 지방자치단체 조례 초안 작성 전문 어시스턴트입니다.
