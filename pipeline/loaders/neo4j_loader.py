@@ -16,6 +16,7 @@ from dataclasses import asdict
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from neo4j import GraphDatabase
+from neo4j.exceptions import TransientError
 
 from pipeline.config import config
 from pipeline.transform.schema_mapper import (
@@ -499,8 +500,13 @@ class Neo4jLoader:
             )
             return
 
-        created = 0
-        for row in rows:
+        @retry(
+            retry=retry_if_exception(lambda e: isinstance(e, TransientError)),
+            wait=wait_exponential(multiplier=2, min=4, max=30),
+            stop=stop_after_attempt(5),
+            reraise=True,
+        )
+        def _run_one(row: dict) -> int:
             with self._driver.session() as session:
                 summary = session.run(
                     _VECTOR_SIMILAR_TO,
@@ -509,7 +515,14 @@ class Neo4jLoader:
                     top_k=10,
                     threshold=config.similar_to_threshold,
                 ).consume()
-                created += summary.counters.relationships_created
+            return summary.counters.relationships_created
+
+        created = 0
+        for row in rows:
+            try:
+                created += _run_one(row)
+            except TransientError:
+                logger.warning("SIMILAR_TO 재시도 한계 초과 — ordinance_id=%s 건너뜀", row["id"])
 
         logger.info("SIMILAR_TO (vector): created/updated %d relationships", created)
 
