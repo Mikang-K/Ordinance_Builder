@@ -233,6 +233,7 @@ async def create_session(
             **_DEFAULT_STATE,
             "user_input": body.initial_message,
             "messages": [HumanMessage(content=body.initial_message)],
+            "ordinance_type": body.ordinance_type,  # 프론트엔드에서 명시적으로 전달 → LLM 추출 불필요
         }
         try:
             result = await graph.ainvoke(initial_state, config=config)

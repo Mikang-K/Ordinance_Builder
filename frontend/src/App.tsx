@@ -91,6 +91,14 @@ export default function App() {
   const [tutorialStep, setTutorialStep] = useState(-1)   // -1 = inactive, 0~4 = active step
   const TUTORIAL_KEY = 'ordinance_tutorial_completed'
 
+  const getInitialTutorialStep = () => {
+    if (stage === 'completed') return 4
+    if (stage === 'draft_review' || stage === 'legal_review_requested' || stage === 'legal_checking') return 3
+    if (stage === 'article_interviewing' || stage === 'article_complete' || stage === 'drafting') return 2
+    if (isOnboardingOpen) return 1
+    return 0
+  }
+
   const sessionIdRef = useRef<string | null>(null)
   const [fontSize, setFontSize] = useState<number>(16)
 
@@ -171,12 +179,12 @@ export default function App() {
     }
   }
 
-  const handleWizardStart = async (message: string) => {
+  const handleWizardStart = async (message: string, ordinanceType: string) => {
     setIsOnboardingOpen(false)
     setIsLoading(true)
     setLoadingMessage('기본 정보를 분석하고 있습니다...')
     try {
-      const res = await createSession(message)
+      const res = await createSession(message, ordinanceType)
       sessionIdRef.current = res.session_id
       setHasSession(true)
       applyResponse({ ...res, is_complete: false })
@@ -437,7 +445,7 @@ export default function App() {
             ✚ 새 조례 만들기
           </button>
           <button
-            onClick={() => setTutorialStep(0)}
+            onClick={() => setTutorialStep(getInitialTutorialStep())}
             style={{
               padding: '6px 12px',
               background: 'rgba(255,255,255,0.15)',

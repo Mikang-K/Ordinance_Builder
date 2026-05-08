@@ -41,6 +41,11 @@ class SessionCreateRequest(BaseModel):
         max_length=4000,
         description="첫 메시지 (없으면 빈 세션 생성 후 별도 /chat 요청)",
     )
+    ordinance_type: Optional[str] = Field(
+        None,
+        description="조례 유형 ('지원' | '설치·운영' | '관리·규제' | '복지·서비스'). "
+                    "LLM 추출 의존 없이 프론트엔드에서 직접 전달.",
+    )
 
 
 class SessionCreateResponse(BaseModel):

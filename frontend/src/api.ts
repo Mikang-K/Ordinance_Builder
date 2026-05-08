@@ -16,11 +16,17 @@ async function authHeaders(): Promise<HeadersInit> {
   }
 }
 
-export async function createSession(initialMessage: string): Promise<SessionCreateResponse> {
+export async function createSession(
+  initialMessage: string,
+  ordinanceType?: string,
+): Promise<SessionCreateResponse> {
   const res = await fetch('/api/v1/session', {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ initial_message: initialMessage }),
+    body: JSON.stringify({
+      initial_message: initialMessage,
+      ordinance_type: ordinanceType ?? null,
+    }),
   })
   if (!res.ok) throw new Error(`세션 생성 실패: ${res.status}`)
   return res.json()

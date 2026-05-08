@@ -214,7 +214,7 @@ function buildMessage(type: string, fields: Record<string, string>): string {
 interface Props {
   isOpen: boolean
   onClose: () => void
-  onStart: (message: string) => void
+  onStart: (message: string, ordinanceType: string) => void
   isLoading: boolean
 }
 
@@ -277,7 +277,7 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
       target_group: get('target_group'),
       support_type: get('support_type'),
     }
-    onStart(buildMessage(selectedType, fields))
+    onStart(buildMessage(selectedType, fields), selectedType)
   }
 
   const progress = isTypeScreen ? 0 : ((stepIndex + 1) / totalSteps) * 100

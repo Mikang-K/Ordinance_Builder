@@ -1520,5 +1520,35 @@ python -m pipeline.scripts.migrate_relations            # 실제 MERGE
 
 ---
 
+### 30. OnboardingWizard → SessionCreate `ordinance_type` 명시 전달 (2026-05-08)
+
+**증상**: 기본 정보 작성 후 상세 조례 작성 모달·버튼이 표시되지 않음.
+`stage = "interviewing"`, `current_article_key = null` 반환.
+
+**근본 원인**:
+
+1. `intent_analyzer_node`가 Gemini에게 `ordinance_type`을 자연어에서 추출하도록 위임
+2. 특히 비-'지원' 조례 유형의 경우, OnboardingWizard 메시지가 "역할" 언어를 사용해 Gemini가 `ordinance_type`을 추출하지 못하는 경우 발생
+3. `ordinance_type` 추출 실패 → `REQUIRED_FIELDS` fallback 적용 → `support_type` 필수 → `missing_fields != []`
+4. `route_after_intent_analysis` → `"interviewer"` → `article_queue=None`, `current_article_key=None`
+5. 프론트엔드: `mappedArticles = []` → `isArticleModalOpen = false` → 모달·버튼 미표시
+
+**수정 파일 (5곳)**:
+
+1. `app/api/schemas.py` — `SessionCreateRequest`에 `ordinance_type: Optional[str]` 추가
+2. `app/api/routers/chat.py` — `create_session` 핸들러의 `initial_state`에 `body.ordinance_type` 주입
+3. `frontend/src/api.ts` — `createSession(message, ordinanceType?)` 시그니처 변경
+4. `frontend/src/components/OnboardingWizard.tsx` — `onStart` 타입 `(message, ordinanceType) => void` + 호출 시 `selectedType` 전달
+5. `frontend/src/App.tsx` — `handleWizardStart(message, ordinanceType)` 시그니처 변경 + `createSession(message, ordinanceType)` 호출
+
+**동작 원리**: `initial_state["ordinance_type"]`에 주입된 값은 `intent_analyzer`에서 `state.get("ordinance_type")`으로 읽혀 Gemini 추출 실패의 fallback으로 작동. LLM이 추출하면 LLM 값이 우선, 실패하면 프론트엔드 전달값 사용 → 결정적(deterministic) 흐름 보장.
+
+**체크리스트**:
+- `SessionCreateRequest`에 `ordinance_type`이 있으므로 새 조례 유형 추가 시 프론트엔드 wizard에서 선택한 값 그대로 전달
+- LLM이 유형을 잘못 추출해도 state에 주입된 값으로 보정되므로 interview 루프 탈출 보장
+- `intent_analyzer_node` 코드 변경 없음 — `state.get("ordinance_type")`이 이미 fallback 로직 포함
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.
