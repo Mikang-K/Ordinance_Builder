@@ -5,12 +5,14 @@
      xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
      xmlns:xml="http://www.w3.org/XML/1998/namespace"
      xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
-     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#">
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:swrl="http://www.w3.org/2003/11/swrl#"
+     xmlns:swrla="http://swrl.stanford.edu/ontologies/3.3/swrla.owl#">
     <owl:Ontology rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3"/>
-    
 
 
-    <!-- 
+
+    <!--
     ///////////////////////////////////////////////////////////////////////////////////////
     //
     // Object Properties
@@ -18,73 +20,245 @@
     ///////////////////////////////////////////////////////////////////////////////////////
      -->
 
-    
+
+
+
+    <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#제한하다 -->
+
+    <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#제한하다">
+        <rdfs:label xml:lang="ko">제한하다</rdfs:label>
+        <rdfs:label xml:lang="en">limits</rdfs:label>
+        <rdfs:comment>조문이 법적 개념(행위·용어)의 범위·기준을 제한함.
+            Neo4j: LIMITS (Provision → LegalTerm).
+            활용처: get_delegation_limits (SWRL Rule 1 위임 상속), legal_checker 용어 제한 범위 검증.</rdfs:comment>
+        <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조"/>
+        <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적개념"/>
+    </owl:ObjectProperty>
+
+
+
+    <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#인용하다 -->
+
+    <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#인용하다">
+        <rdfs:label xml:lang="ko">인용하다</rdfs:label>
+        <rdfs:label xml:lang="en">references</rdfs:label>
+        <rdfs:comment>조문이 다른 조문을 인용·참조함.
+            Neo4j: REFERENCES (Provision → Provision).
+            활용처: 조문 간 인용 체계 파악, 법령 개정 영향 추적.</rdfs:comment>
+        <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조"/>
+        <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조"/>
+    </owl:ObjectProperty>
+
+
+
+    <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#집행하다 -->
+
+    <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#집행하다">
+        <rdfs:label xml:lang="ko">집행하다</rdfs:label>
+        <rdfs:label xml:lang="en">enforces</rdfs:label>
+        <rdfs:comment>조례가 상위법률의 집행 근거로 지정됨.
+            Neo4j: ENFORCES (Ordinance → Statute).
+            역관계: 집행근거를_가지다 (isEnforcedBy).
+            활용처: 법령 집행 체계 파악.</rdfs:comment>
+        <owl:inverseOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#집행근거를_가지다"/>
+        <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례"/>
+        <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상위법률"/>
+    </owl:ObjectProperty>
+
+
+
+    <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#집행근거를_가지다 -->
+
+    <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#집행근거를_가지다">
+        <rdfs:label xml:lang="ko">집행근거를_가지다</rdfs:label>
+        <rdfs:label xml:lang="en">isEnforcedBy</rdfs:label>
+        <rdfs:comment>상위법률이 특정 조례에 의해 집행됨 (집행하다의 역관계).
+            Neo4j: 직접 매핑 없음 (ENFORCES 역방향 탐색).
+            활용처: 상위법이 어느 조례로 집행되는지 역방향 조회.</rdfs:comment>
+        <owl:inverseOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#집행하다"/>
+        <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상위법률"/>
+        <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례"/>
+    </owl:ObjectProperty>
+
+
+
+    <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#제재하다 -->
+
+    <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#제재하다">
+        <rdfs:label xml:lang="ko">제재하다</rdfs:label>
+        <rdfs:label xml:lang="en">penalizes</rdfs:label>
+        <rdfs:comment>벌칙 조항이 위반 행위 대상 조항을 제재함.
+            Neo4j: PENALIZES (Provision → Provision).
+            활용처: get_penalty_chain (직접 벌칙), get_penalty_extension (SWRL Rule 4 2단계 벌칙 범위 확장).</rdfs:comment>
+        <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조"/>
+        <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조"/>
+    </owl:ObjectProperty>
+
+
+
+    <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#우위에_있다 -->
+
+    <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#우위에_있다">
+        <rdfs:label xml:lang="ko">우위에_있다</rdfs:label>
+        <rdfs:label xml:lang="en">isSuperiorTo</rdfs:label>
+        <rdfs:comment>상위법률이 조례보다 법적 위계가 높음 (전이적: 헌법 > 법률 > 시행령 > 조례).
+            Neo4j: SUPERIOR_TO (Statute → Ordinance).
+            역관계: 하위에_있다 (inferiorTo).
+            활용처: get_superior_statute_provisions, get_hierarchy_chain (SWRL Rule 2 위계 전이성).</rdfs:comment>
+        <owl:inverseOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#하위에_있다"/>
+        <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상위법률"/>
+        <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례"/>
+    </owl:ObjectProperty>
+
+
+
+    <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#하위에_있다 -->
+
+    <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#하위에_있다">
+        <rdfs:label xml:lang="ko">하위에_있다</rdfs:label>
+        <rdfs:label xml:lang="en">inferiorTo</rdfs:label>
+        <rdfs:comment>조례가 상위법률보다 법적 위계가 낮음 (우위에_있다의 역관계).
+            Neo4j: 직접 매핑 없음 (SUPERIOR_TO 역방향 탐색).
+            활용처: 조례가 어느 상위법 아래에 위치하는지 역방향 조회.</rdfs:comment>
+        <owl:inverseOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#우위에_있다"/>
+        <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례"/>
+        <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상위법률"/>
+    </owl:ObjectProperty>
+
+
+
+    <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#유사하다 -->
+
+    <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#유사하다">
+        <rdfs:label xml:lang="ko">유사하다</rdfs:label>
+        <rdfs:label xml:lang="en">isSimilarTo</rdfs:label>
+        <rdfs:comment>지자체 조례 간 내용적 유사성 (대칭 관계).
+            Neo4j: SIMILAR_TO (Ordinance ↔ Ordinance, 양방향).
+            활용처: find_similar_ordinances, 타 지자체 조례 참고 제공.</rdfs:comment>
+        <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례"/>
+        <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례"/>
+    </owl:ObjectProperty>
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상충하다 -->
 
     <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상충하다">
+        <rdfs:label xml:lang="ko">상충하다</rdfs:label>
+        <rdfs:label xml:lang="en">conflictsWith</rdfs:label>
+        <rdfs:comment>조례가 상위법률과 규정 내용이 충돌함.
+            Neo4j: CONFLICTS_WITH (Ordinance → Statute).
+            활용처: legal_checker 충돌 감지, get_conflict_chain (SWRL Rule 3 충돌 연쇄 감지).</rdfs:comment>
         <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례"/>
         <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상위법률"/>
     </owl:ObjectProperty>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#수행주체이다 -->
 
     <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#수행주체이다">
+        <rdfs:label xml:lang="ko">수행주체이다</rdfs:label>
+        <rdfs:label xml:lang="en">hasAgent</rdfs:label>
+        <rdfs:comment>법적 행위의 권리 주체를 지정함.
+            Neo4j: 직접 매핑 관계 없음 (앱 미사용).
+            활용처: 법적 행위 주체 추론 (향후 확장 예정).</rdfs:comment>
         <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적행위"/>
         <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#권리주체"/>
     </owl:ObjectProperty>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#위임근거를_가지다 -->
 
     <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#위임근거를_가지다">
+        <rdfs:label xml:lang="ko">위임근거를_가지다</rdfs:label>
+        <rdfs:label xml:lang="en">hasLegalBasis</rdfs:label>
+        <rdfs:comment>조례가 상위법률로부터 위임받은 근거를 보유함 (위임하다의 역관계).
+            Neo4j: BASED_ON (Ordinance → Statute).
+            활용처: graph_retriever Phase 2 BASED_ON 경로 탐색.</rdfs:comment>
+        <owl:inverseOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#위임하다"/>
         <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례"/>
         <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상위법률"/>
     </owl:ObjectProperty>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#위임하다 -->
 
     <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#위임하다">
+        <rdfs:label xml:lang="ko">위임하다</rdfs:label>
+        <rdfs:label xml:lang="en">delegates</rdfs:label>
+        <rdfs:comment>상위법률이 조례 제정 권한을 위임함.
+            Neo4j: DELEGATES (Statute → Ordinance).
+            역관계: 위임근거를_가지다 (hasLegalBasis).
+            활용처: graph_retriever Phase 1 최우선 탐색, get_delegation_limits (SWRL Rule 1 위임 상속).</rdfs:comment>
+        <owl:inverseOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#위임근거를_가지다"/>
         <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상위법률"/>
         <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례"/>
     </owl:ObjectProperty>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#정의하다 -->
 
     <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#정의하다">
+        <rdfs:label xml:lang="ko">정의하다</rdfs:label>
+        <rdfs:label xml:lang="en">defines</rdfs:label>
+        <rdfs:comment>조문구조가 법적 개념(용어)을 공식 정의함.
+            Neo4j: DEFINES (Statute → LegalTerm).
+            활용처: find_legal_terms, 법령 용어 정의 검색.</rdfs:comment>
         <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문구조"/>
         <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적개념"/>
     </owl:ObjectProperty>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#준용하다 -->
 
     <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#준용하다">
+        <rdfs:label xml:lang="ko">준용하다</rdfs:label>
+        <rdfs:label xml:lang="en">appliesByAnalogy</rdfs:label>
+        <rdfs:comment>조례가 상위법률의 규정을 준용·유추 적용함.
+            Neo4j: APPLIES_BY_ANALOGY (Ordinance → Statute).
+            활용처: get_analogy_applications, 유추 적용 법령 근거 보강.</rdfs:comment>
         <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례"/>
         <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상위법률"/>
     </owl:ObjectProperty>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#포함하다 -->
 
     <owl:ObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#포함하다">
+        <rdfs:label xml:lang="ko">포함하다</rdfs:label>
+        <rdfs:label xml:lang="en">contains</rdfs:label>
+        <rdfs:comment>조문구조 상위 요소가 하위 요소를 포함함 (전이적: 장>조>항>호>목).
+            Neo4j: CONTAINS (Statute/Ordinance → Provision).
+            활용처: get_delegation_limits 3홉 경로 (DELEGATES→CONTAINS→LIMITS).</rdfs:comment>
         <rdfs:domain rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문구조"/>
         <rdfs:range rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문구조"/>
     </owl:ObjectProperty>
-    
 
 
-    <!-- 
+
+    <!--
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // Transitive Object Properties
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+
+    <!-- 우위에_있다 — 법적 위계 전이성: 헌법 > 법률 > 시행령 > 조례 -->
+    <owl:TransitiveObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#우위에_있다"/>
+
+    <!-- 포함하다 — 조문구조 포함 전이성: Statute > Provision > Paragraph > Item > SubItem -->
+    <owl:TransitiveObjectProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#포함하다"/>
+
+
+    <!--
     ///////////////////////////////////////////////////////////////////////////////////////
     //
     // Data properties
@@ -92,7 +266,7 @@
     ///////////////////////////////////////////////////////////////////////////////////////
      -->
 
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적효력일 -->
@@ -100,7 +274,7 @@
     <owl:DatatypeProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적효력일">
         <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#dateTime"/>
     </owl:DatatypeProperty>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문 -->
@@ -108,7 +282,7 @@
     <owl:DatatypeProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문">
         <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
     </owl:DatatypeProperty>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문번호 -->
@@ -116,7 +290,7 @@
     <owl:DatatypeProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문번호">
         <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#integer"/>
     </owl:DatatypeProperty>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문제목 -->
@@ -124,10 +298,10 @@
     <owl:DatatypeProperty rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문제목">
         <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
     </owl:DatatypeProperty>
-    
 
 
-    <!-- 
+
+    <!--
     ///////////////////////////////////////////////////////////////////////////////////////
     //
     // Classes
@@ -135,7 +309,7 @@
     ///////////////////////////////////////////////////////////////////////////////////////
      -->
 
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#객체 -->
@@ -143,7 +317,7 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#객체">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적개념"/>
     </owl:Class>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#권리주체 -->
@@ -151,7 +325,7 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#권리주체">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적개념"/>
     </owl:Class>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#규칙 -->
@@ -159,7 +333,7 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#규칙">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#자치법규"/>
     </owl:Class>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#목 -->
@@ -167,19 +341,19 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#목">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#호"/>
     </owl:Class>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법규범 -->
 
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법규범"/>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적개념 -->
 
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적개념"/>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적행위 -->
@@ -187,7 +361,7 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적행위">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법적개념"/>
     </owl:Class>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상위법률 -->
@@ -195,7 +369,7 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상위법률">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법규범"/>
     </owl:Class>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#자치법규 -->
@@ -203,7 +377,7 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#자치법규">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#법규범"/>
     </owl:Class>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#장 -->
@@ -211,7 +385,7 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#장">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문구조"/>
     </owl:Class>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조 -->
@@ -219,7 +393,7 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#장"/>
     </owl:Class>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례 -->
@@ -227,13 +401,13 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조례">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#자치법규"/>
     </owl:Class>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문구조 -->
 
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조문구조"/>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#항 -->
@@ -241,7 +415,7 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#항">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#조"/>
     </owl:Class>
-    
+
 
 
     <!-- http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#호 -->
@@ -249,9 +423,246 @@
     <owl:Class rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#호">
         <rdfs:subClassOf rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#항"/>
     </owl:Class>
+
+
+    <!--
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // SWRL Rules
+    // Cypher 구현: app/db/neo4j_db.py (get_delegation_limits, get_hierarchy_chain,
+    //              get_conflict_chain, get_penalty_extension)
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+
+    <!-- Rule 1: 위임 상속 (DelegationInheritance)
+         Cypher: MATCH (s)-[:DELEGATES]->(o)-[:CONTAINS]->(p)-[:LIMITS]->(lt)
+         구현: neo4j_db.get_delegation_limits(), graph_retriever에서 legal_basis 병합 -->
+
+    <swrl:Imp rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#DelegationInheritance">
+        <rdfs:label>위임 상속: 상위법이 위임한 조례의 제한 범위를 상위법도 간접 포괄함</rdfs:label>
+        <swrla:enabled rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</swrla:enabled>
+        <swrl:body>
+            <swrl:AtomList>
+                <rdf:first>
+                    <swrl:ObjectPropertyAtom>
+                        <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#위임하다"/>
+                        <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#s"/></swrl:argument1>
+                        <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#o"/></swrl:argument2>
+                    </swrl:ObjectPropertyAtom>
+                </rdf:first>
+                <rdf:rest>
+                    <swrl:AtomList>
+                        <rdf:first>
+                            <swrl:ObjectPropertyAtom>
+                                <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#포함하다"/>
+                                <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#o"/></swrl:argument1>
+                                <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#p"/></swrl:argument2>
+                            </swrl:ObjectPropertyAtom>
+                        </rdf:first>
+                        <rdf:rest>
+                            <swrl:AtomList>
+                                <rdf:first>
+                                    <swrl:ObjectPropertyAtom>
+                                        <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#제한하다"/>
+                                        <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#p"/></swrl:argument1>
+                                        <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#lt"/></swrl:argument2>
+                                    </swrl:ObjectPropertyAtom>
+                                </rdf:first>
+                                <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+                            </swrl:AtomList>
+                        </rdf:rest>
+                    </swrl:AtomList>
+                </rdf:rest>
+            </swrl:AtomList>
+        </swrl:body>
+        <swrl:head>
+            <swrl:AtomList>
+                <rdf:first>
+                    <swrl:ObjectPropertyAtom>
+                        <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#제한하다"/>
+                        <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#s"/></swrl:argument1>
+                        <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#lt"/></swrl:argument2>
+                    </swrl:ObjectPropertyAtom>
+                </rdf:first>
+                <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+            </swrl:AtomList>
+        </swrl:head>
+    </swrl:Imp>
+
+
+    <!-- Rule 2: 위계 전이성 (HierarchyTransitivity)
+         OWL TransitiveObjectProperty 선언으로 추론기가 자동 처리.
+         Cypher: MATCH (s)-[:SUPERIOR_TO*1..3]->(o)
+         구현: neo4j_db.get_hierarchy_chain(), legal_checker 위계 체계 검증 -->
+
+    <swrl:Imp rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#HierarchyTransitivity">
+        <rdfs:label>위계 전이성: 법적 위계 관계의 전이성 (owl:TransitiveObjectProperty로도 선언됨)</rdfs:label>
+        <swrla:enabled rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</swrla:enabled>
+        <swrl:body>
+            <swrl:AtomList>
+                <rdf:first>
+                    <swrl:ObjectPropertyAtom>
+                        <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#우위에_있다"/>
+                        <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#a"/></swrl:argument1>
+                        <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#b"/></swrl:argument2>
+                    </swrl:ObjectPropertyAtom>
+                </rdf:first>
+                <rdf:rest>
+                    <swrl:AtomList>
+                        <rdf:first>
+                            <swrl:ObjectPropertyAtom>
+                                <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#우위에_있다"/>
+                                <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#b"/></swrl:argument1>
+                                <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#c"/></swrl:argument2>
+                            </swrl:ObjectPropertyAtom>
+                        </rdf:first>
+                        <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+                    </swrl:AtomList>
+                </rdf:rest>
+            </swrl:AtomList>
+        </swrl:body>
+        <swrl:head>
+            <swrl:AtomList>
+                <rdf:first>
+                    <swrl:ObjectPropertyAtom>
+                        <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#우위에_있다"/>
+                        <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#a"/></swrl:argument1>
+                        <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#c"/></swrl:argument2>
+                    </swrl:ObjectPropertyAtom>
+                </rdf:first>
+                <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+            </swrl:AtomList>
+        </swrl:head>
+    </swrl:Imp>
+
+
+    <!-- Rule 3: 충돌 연쇄 (ConflictChain)
+         Cypher: MATCH (s)-[:SUPERIOR_TO]->(o), (s)-[:CONTAINS]->(sp)-[:LIMITS]->(lt),
+                        (o)-[:CONTAINS]->(op)-[:LIMITS]->(lt)
+         구현: neo4j_db.get_conflict_chain(), legal_checker 동일 용어 충돌 위험 감지 -->
+
+    <swrl:Imp rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#ConflictChain">
+        <rdfs:label>충돌 연쇄: 상위법과 조례가 동일 법적 용어를 동시 제한할 때 잠재적 충돌</rdfs:label>
+        <swrla:enabled rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</swrla:enabled>
+        <swrl:body>
+            <swrl:AtomList>
+                <rdf:first>
+                    <swrl:ObjectPropertyAtom>
+                        <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#우위에_있다"/>
+                        <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#s"/></swrl:argument1>
+                        <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#o"/></swrl:argument2>
+                    </swrl:ObjectPropertyAtom>
+                </rdf:first>
+                <rdf:rest>
+                    <swrl:AtomList>
+                        <rdf:first>
+                            <swrl:ObjectPropertyAtom>
+                                <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#포함하다"/>
+                                <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#s"/></swrl:argument1>
+                                <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#sp"/></swrl:argument2>
+                            </swrl:ObjectPropertyAtom>
+                        </rdf:first>
+                        <rdf:rest>
+                            <swrl:AtomList>
+                                <rdf:first>
+                                    <swrl:ObjectPropertyAtom>
+                                        <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#제한하다"/>
+                                        <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#sp"/></swrl:argument1>
+                                        <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#lt"/></swrl:argument2>
+                                    </swrl:ObjectPropertyAtom>
+                                </rdf:first>
+                                <rdf:rest>
+                                    <swrl:AtomList>
+                                        <rdf:first>
+                                            <swrl:ObjectPropertyAtom>
+                                                <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#포함하다"/>
+                                                <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#o"/></swrl:argument1>
+                                                <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#op"/></swrl:argument2>
+                                            </swrl:ObjectPropertyAtom>
+                                        </rdf:first>
+                                        <rdf:rest>
+                                            <swrl:AtomList>
+                                                <rdf:first>
+                                                    <swrl:ObjectPropertyAtom>
+                                                        <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#제한하다"/>
+                                                        <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#op"/></swrl:argument1>
+                                                        <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#lt"/></swrl:argument2>
+                                                    </swrl:ObjectPropertyAtom>
+                                                </rdf:first>
+                                                <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+                                            </swrl:AtomList>
+                                        </rdf:rest>
+                                    </swrl:AtomList>
+                                </rdf:rest>
+                            </swrl:AtomList>
+                        </rdf:rest>
+                    </swrl:AtomList>
+                </rdf:rest>
+            </swrl:AtomList>
+        </swrl:body>
+        <swrl:head>
+            <swrl:AtomList>
+                <rdf:first>
+                    <swrl:ObjectPropertyAtom>
+                        <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#상충하다"/>
+                        <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#o"/></swrl:argument1>
+                        <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#s"/></swrl:argument2>
+                    </swrl:ObjectPropertyAtom>
+                </rdf:first>
+                <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+            </swrl:AtomList>
+        </swrl:head>
+    </swrl:Imp>
+
+
+    <!-- Rule 4: 벌칙 범위 확장 (PenaltyExtension)
+         Cypher: MATCH (p1)-[:PENALIZES]->(p2)-[:PENALIZES]->(p3)
+         구현: neo4j_db.get_penalty_extension(), legal_checker 간접 제재 범위 파악 -->
+
+    <swrl:Imp rdf:about="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#PenaltyExtension">
+        <rdfs:label>벌칙 범위 확장: 2단계 벌칙 체인으로 간접 제재 대상 조항 파악</rdfs:label>
+        <swrla:enabled rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</swrla:enabled>
+        <swrl:body>
+            <swrl:AtomList>
+                <rdf:first>
+                    <swrl:ObjectPropertyAtom>
+                        <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#제재하다"/>
+                        <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#p1"/></swrl:argument1>
+                        <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#p2"/></swrl:argument2>
+                    </swrl:ObjectPropertyAtom>
+                </rdf:first>
+                <rdf:rest>
+                    <swrl:AtomList>
+                        <rdf:first>
+                            <swrl:ObjectPropertyAtom>
+                                <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#제재하다"/>
+                                <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#p2"/></swrl:argument1>
+                                <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#p3"/></swrl:argument2>
+                            </swrl:ObjectPropertyAtom>
+                        </rdf:first>
+                        <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+                    </swrl:AtomList>
+                </rdf:rest>
+            </swrl:AtomList>
+        </swrl:body>
+        <swrl:head>
+            <swrl:AtomList>
+                <rdf:first>
+                    <swrl:ObjectPropertyAtom>
+                        <swrl:propertyPredicate rdf:resource="http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#제재하다"/>
+                        <swrl:argument1><swrl:Variable rdf:about="urn:swrl:var#p1"/></swrl:argument1>
+                        <swrl:argument2><swrl:Variable rdf:about="urn:swrl:var#p3"/></swrl:argument2>
+                    </swrl:ObjectPropertyAtom>
+                </rdf:first>
+                <rdf:rest rdf:resource="http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"/>
+            </swrl:AtomList>
+        </swrl:head>
+    </swrl:Imp>
+
 </rdf:RDF>
 
 
-
 <!-- Generated by the OWL API (version 4.5.29.2024-05-13T12:11:03Z) https://github.com/owlcs/owlapi -->
-
+<!-- Enriched: rdfs:label(ko/en) + rdfs:comment + inverseOf + TransitiveObjectProperty + SWRL 4 rules (2026-05-08) -->

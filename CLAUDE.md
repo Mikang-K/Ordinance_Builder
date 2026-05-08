@@ -277,6 +277,11 @@ OWL 클래스와 속성은 Neo4j 그래프 노드·관계로 다음과 같이 �
 | `상충하다` | `CONFLICTS_WITH` 관계 |
 | `포함하다` | `CONTAINS` 관계 |
 | `정의하다` | `DEFINES` 관계 |
+| `제한하다` | `LIMITS` 관계 (`Provision → LegalTerm`) |
+| `인용하다` | `REFERENCES` 관계 (`Provision → Provision`) |
+| `집행하다` | `ENFORCES` 관계 (`Ordinance → Statute`) |
+| `제재하다` | `PENALIZES` 관계 (`Provision → Provision`) |
+| `우위에_있다` | `SUPERIOR_TO` 관계 (`Statute → Ordinance`) |
 
 ---
 
@@ -298,15 +303,18 @@ OWL 클래스와 속성은 Neo4j 그래프 노드·관계로 다음과 같이 �
 
 | 타입 | 방향 | 설명 |
 |------|------|------|
-| `CONTAINS` | `Statute → Provision` | 법령 → 세부 조문 |
+| `CONTAINS` | `Statute/Ordinance → Provision` | 법령·조례 → 세부 조문 |
 | `BASED_ON` | `Ordinance → Statute` | 조례의 법령 근거 |
 | `DELEGATES` | `Statute → Ordinance` | 위임 관계 (우선 탐색) |
-| `SUPERIOR_TO` | `Statute → Ordinance` | 법적 위계질서 |
+| `SUPERIOR_TO` | `Statute → Ordinance` | 법적 위계질서 (OWL: 우위에_있다) |
 | `SIMILAR_TO` | `Ordinance ↔ Ordinance` | 지자체 간 유사 조례 |
-| `LIMITS` | `Provision → LegalTerm` | 조항의 행위 제한 범위 |
-| `CONFLICTS_WITH` | `Ordinance → Statute` | 충돌 관계 |
-| `REFERENCES` | `Provision → Provision` | 조문 간 인용 |
-| `DEFINES` | `Statute → LegalTerm` | 법령이 정의하는 용어 |
+| `LIMITS` | `Provision → LegalTerm` | 조항의 행위 제한 범위 (OWL: 제한하다) |
+| `CONFLICTS_WITH` | `Ordinance → Statute` | 충돌 관계 (OWL: 상충하다) |
+| `REFERENCES` | `Provision → Provision` | 조문 간 인용 (OWL: 인용하다) |
+| `DEFINES` | `Statute → LegalTerm` | 법령이 정의하는 용어 (OWL: 정의하다) |
+| `ENFORCES` | `Ordinance → Statute` | 시행 조례의 집행 근거 (OWL: 집행하다) |
+| `PENALIZES` | `Provision → Provision` | 벌칙 조항 → 위반 대상 조항 (OWL: 제재하다) |
+| `APPLIES_BY_ANALOGY` | `Ordinance → Statute` | 준용 관계 (OWL: 준용하다) |
 
 ### 벡터 인덱스
 
@@ -1469,6 +1477,46 @@ checkpointer = AsyncPostgresSaver(conn=pool)
 - `from_conn_string()`은 단일 연결이라 Cloud Run 같은 환경에서 사용 금지
 - 새 환경(Cloud Run, GKE 등)에 배포 시 반드시 `AsyncConnectionPool` 기반으로 구성
 - `max_idle=300` (5분), `max_lifetime=3600` (1시간) 은 Cloud Run 기본 idle timeout보다 짧게 유지
+
+---
+
+### 29. OWL 온톨로지 보강 + SWRL 추론 구현 (2026-05-08)
+
+**기능**: `ordinance.rdf` 시맨틱 강화 + SWRL 4규칙을 Cypher multi-hop 쿼리로 구현.
+
+**변경 요약**:
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `ordinance.rdf` | swrl/swrla 네임스페이스 추가 / 13개 ObjectProperty에 rdfs:label(ko/en)+rdfs:comment / inverseOf 선언: 위임하다↔위임근거를_가지다, 우위에_있다↔하위에_있다, 집행하다↔집행근거를_가지다 / TransitiveObjectProperty: 우위에_있다, 포함하다 / SWRL 4규칙 XML 블록: DelegationInheritance, HierarchyTransitivity, ConflictChain, PenaltyExtension |
+| `app/db/base.py` | 4개 추상 메서드 추가: `get_delegation_limits`, `get_hierarchy_chain`, `get_conflict_chain`, `get_penalty_extension` |
+| `app/db/neo4j_db.py` | 4개 Cypher path query 구현 (SWRL Rule 1~4) |
+| `app/db/mock_db.py` | 4개 stub 추가 (파이프라인 구축 전 빈 리스트 반환) |
+| `app/graph/nodes/graph_retriever.py` | SWRL Rule 1 위임 상속: `get_delegation_limits` → `legal_basis` 병합 (try/except) |
+| `app/graph/nodes/legal_checker.py` | SWRL Rule 2~4: `get_hierarchy_chain`, `get_conflict_chain`, `get_penalty_extension` 호출 추가 |
+| `app/prompts/legal_checker.py` | `build_legal_checker_human` 시그니처 확장 + 위계 체계·충돌 연쇄·간접 제재 범위 3개 섹션 추가 |
+
+**SWRL 4규칙 Cypher 전략**:
+- neosemantics 미사용 → SWRL 규칙은 OWL 파일에 설계 명세로 선언
+- 실행은 Cypher multi-hop path query로 구현 (새 관계 타입 추가 없음)
+- Rule 1: `(s)-[:DELEGATES]->(o)-[:CONTAINS]->(p)-[:LIMITS]->(lt)` 3홉
+- Rule 2: `(s)-[:SUPERIOR_TO*1..3]->(o)` 가변 홉 + TransitiveObjectProperty 선언
+- Rule 3: SUPERIOR_TO + 양쪽 LIMITS 동일 LegalTerm 감지
+- Rule 4: `(p1)-[:PENALIZES]->(p2)-[:PENALIZES]->(p3)` 2홉
+
+**AuraDB 적용 (S2 — 별도 실행 필요)**:
+```powershell
+$env:NEO4J_URI = "neo4j+s://da425acb.databases.neo4j.io"
+$env:NEO4J_USER = "neo4j"
+$env:NEO4J_PASSWORD = "<password>"
+python -m pipeline.scripts.migrate_relations --dry-run  # 건수 확인 먼저
+python -m pipeline.scripts.migrate_relations            # 실제 MERGE
+```
+
+**체크리스트**:
+- 새 SWRL 규칙 추가 시: OWL 파일에 `swrl:Imp` 선언 + `neo4j_db.py`에 Cypher 구현 병행
+- 모든 SWRL 메서드는 try/except로 감싸져 있어 DB 미구축 시 graceful degradation
+- `build_legal_checker_human` 시그니처는 현재 8개 파라미터 (모두 optional) — 기존 호출 코드 변경 불필요
 
 ---
 

@@ -52,6 +52,40 @@ def graph_retriever_node(
         # Fetch LegalTerm definitions for key terms — used in drafting and legal review.
         legal_terms = db.find_legal_terms(keywords=keywords)
 
+        # APPLIES_BY_ANALOGY path (OWL: 준용하다): append analogy-grounded statute
+        # provisions to legal_basis without duplicating already-found entries.
+        try:
+            analogy_results = db.get_analogy_applications(keywords=keywords)
+            existing = {(r["statute_id"], r["provision_article"]) for r in legal_basis}
+            for r in analogy_results:
+                key = (r["statute_id"], r["provision_article"])
+                if key not in existing:
+                    legal_basis.append(r)
+                    existing.add(key)
+        except Exception as analogy_exc:
+            logger.debug("APPLIES_BY_ANALOGY 검색 생략: %s", analogy_exc)
+
+        # SWRL Rule 1 — 위임 상속 (DelegationInheritance):
+        # DELEGATES → CONTAINS → LIMITS 3홉 경로로 위임 범위 내 법률 용어 제한 근거를 보강.
+        try:
+            delegation_results = db.get_delegation_limits(keywords=keywords)
+            existing_keys = {(r["statute_id"], r.get("provision_article")) for r in legal_basis}
+            for r in delegation_results:
+                key = (r["statute_id"], r.get("provision_article"))
+                if key not in existing_keys:
+                    legal_basis.append({
+                        "statute_id": r["statute_id"],
+                        "statute_title": r["statute_title"],
+                        "provision_article": r.get("provision_article", ""),
+                        "provision_content": (
+                            f"[위임 상속 용어] {r['term_name']}: {r.get('definition', '')}"
+                        ),
+                        "relation_type": "DELEGATION_CHAIN",
+                    })
+                    existing_keys.add(key)
+        except Exception as delegation_exc:
+            logger.debug("SWRL Rule 1 위임 상속 검색 생략: %s", delegation_exc)
+
     except Exception as e:
         logger.warning("Graph DB 검색 실패 — 빈 결과로 계속 진행: %s", e)
 

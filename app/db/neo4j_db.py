@@ -250,20 +250,31 @@ class Neo4jGraphDB(GraphDBInterface):
         """
         Return provisions that restrict the given legal term (LIMITS relationship).
 
-        Falls back to a text-match if no LIMITS edges exist.
+        Priority:
+        1. LIMITS edge traversal (OWL: 제한하다) — accurate graph-based lookup.
+        2. Text-match fallback when LIMITS edges are not yet built.
         """
-        query = """
+        limits_query = """
+        MATCH (p:Provision)-[:LIMITS]->(lt:LegalTerm {term_name: $term})
+        RETURN p.article_no        AS article_no,
+               p.content_text      AS content_text,
+               p.is_penalty_clause AS is_penalty_clause
+        LIMIT 10
+        """
+        fallback_query = """
         MATCH (p:Provision)
         WHERE p.is_penalty_clause = true
           AND p.content_text CONTAINS $term
-        RETURN p.article_no      AS article_no,
-               p.content_text    AS content_text,
+        RETURN p.article_no        AS article_no,
+               p.content_text      AS content_text,
                p.is_penalty_clause AS is_penalty_clause
         LIMIT 10
         """
         with self._driver.session() as session:
-            result = session.run(query, term=legal_term)
-            return [dict(r) for r in result]
+            rows = [dict(r) for r in session.run(limits_query, term=legal_term)]
+            if not rows:
+                rows = [dict(r) for r in session.run(fallback_query, term=legal_term)]
+        return rows
 
     def get_similar_ordinance_provisions(
         self,
@@ -352,6 +363,173 @@ class Neo4jGraphDB(GraphDBInterface):
         except Exception as exc:  # noqa: BLE001
             logger.warning("vector_search_ordinances failed: %s", exc)
             return []
+
+    def get_analogy_applications(
+        self,
+        keywords: list[str],
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """
+        Return statute provisions reached via APPLIES_BY_ANALOGY from relevant ordinances.
+
+        OWL: 준용하다 — supplements legal_basis with analogy-based statutory grounding.
+        """
+        query = """
+        MATCH (o:Ordinance)-[:APPLIES_BY_ANALOGY]->(s:Statute)
+        WHERE ANY(kw IN $keywords WHERE o.title CONTAINS kw)
+        MATCH (s)-[:CONTAINS]->(p:Provision)
+        WHERE ANY(kw IN $keywords WHERE p.content_text CONTAINS kw)
+        RETURN DISTINCT
+               s.id           AS statute_id,
+               s.title        AS statute_title,
+               p.article_no   AS provision_article,
+               p.content_text AS provision_content,
+               'APPLIES_BY_ANALOGY' AS relation_type
+        LIMIT $limit
+        """
+        with self._driver.session() as session:
+            result = session.run(query, keywords=keywords, limit=limit)
+            return [dict(r) for r in result]
+
+    def get_superior_statute_provisions(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """
+        Return provisions from statutes hierarchically superior to related ordinances.
+
+        OWL: 우위에_있다 — used by legal_checker to verify hierarchy compliance.
+        """
+        query = """
+        MATCH (s:Statute)-[:SUPERIOR_TO]->(o:Ordinance)
+        WHERE ANY(kw IN $keywords WHERE o.title CONTAINS kw)
+        MATCH (s)-[:CONTAINS]->(p:Provision)
+        RETURN DISTINCT
+               s.id           AS statute_id,
+               s.title        AS statute_title,
+               p.article_no   AS provision_article,
+               p.content_text AS provision_content,
+               s.category     AS statute_category
+        ORDER BY s.title
+        LIMIT $limit
+        """
+        with self._driver.session() as session:
+            result = session.run(query, keywords=keywords, limit=limit)
+            return [dict(r) for r in result]
+
+    def get_penalty_chain(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """
+        Return penalty clause → target provision chains (PENALIZES path).
+
+        OWL: 제재하다 — used by legal_checker to verify penalty scope coverage.
+        """
+        query = """
+        MATCH (penalty:Provision {is_penalty_clause: true})-[:PENALIZES]->(target:Provision)
+        WHERE ANY(kw IN $keywords WHERE target.content_text CONTAINS kw
+                                     OR penalty.content_text CONTAINS kw)
+        RETURN DISTINCT
+               penalty.article_no   AS penalty_article,
+               penalty.content_text AS penalty_content,
+               target.article_no    AS target_article,
+               target.content_text  AS target_content
+        LIMIT $limit
+        """
+        with self._driver.session() as session:
+            result = session.run(query, keywords=keywords, limit=limit)
+            return [dict(r) for r in result]
+
+    def get_delegation_limits(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """SWRL Rule 1 — 위임 상속: DELEGATES → CONTAINS → LIMITS 3홉 경로."""
+        query = """
+        MATCH (s:Statute)-[:DELEGATES]->(o:Ordinance)
+        WHERE ANY(kw IN $keywords WHERE o.title CONTAINS kw)
+        MATCH (o)-[:CONTAINS]->(p:Provision)-[:LIMITS]->(lt:LegalTerm)
+        RETURN DISTINCT
+               s.id           AS statute_id,
+               s.title        AS statute_title,
+               lt.term_name   AS term_name,
+               lt.definition  AS definition,
+               p.article_no   AS provision_article
+        LIMIT $limit
+        """
+        with self._driver.session() as session:
+            result = session.run(query, keywords=keywords, limit=limit)
+            return [dict(r) for r in result]
+
+    def get_hierarchy_chain(
+        self,
+        keywords: list[str],
+        max_depth: int = 3,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """SWRL Rule 2 — 위계 전이성: SUPERIOR_TO*1..max_depth 다중 홉 경로."""
+        query = """
+        MATCH path = (s:Statute)-[:SUPERIOR_TO*1..$max_depth]->(o:Ordinance)
+        WHERE ANY(kw IN $keywords WHERE o.title CONTAINS kw OR s.title CONTAINS kw)
+        RETURN DISTINCT
+               s.id           AS statute_id,
+               s.title        AS statute_title,
+               s.category     AS statute_category,
+               o.id           AS ordinance_id,
+               o.title        AS ordinance_title,
+               length(path)   AS depth
+        ORDER BY depth, s.title
+        LIMIT $limit
+        """
+        with self._driver.session() as session:
+            result = session.run(query, keywords=keywords, max_depth=max_depth, limit=limit)
+            return [dict(r) for r in result]
+
+    def get_conflict_chain(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """SWRL Rule 3 — 충돌 연쇄: 상위법·조례가 동일 LegalTerm을 동시 LIMITS할 때."""
+        query = """
+        MATCH (s:Statute)-[:SUPERIOR_TO]->(o:Ordinance)
+        WHERE ANY(kw IN $keywords WHERE o.title CONTAINS kw)
+        MATCH (s)-[:CONTAINS]->(sp:Provision)-[:LIMITS]->(lt:LegalTerm)
+        MATCH (o)-[:CONTAINS]->(op:Provision)-[:LIMITS]->(lt)
+        RETURN DISTINCT
+               sp.article_no   AS statute_article,
+               sp.content_text AS statute_content,
+               op.article_no   AS ordinance_article,
+               op.content_text AS ordinance_content,
+               lt.term_name    AS conflict_term
+        LIMIT $limit
+        """
+        with self._driver.session() as session:
+            result = session.run(query, keywords=keywords, limit=limit)
+            return [dict(r) for r in result]
+
+    def get_penalty_extension(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """SWRL Rule 4 — 벌칙 범위 확장: PENALIZES 2홉 체인."""
+        query = """
+        MATCH (p1:Provision)-[:PENALIZES]->(p2:Provision)-[:PENALIZES]->(p3:Provision)
+        WHERE ANY(kw IN $keywords WHERE p1.content_text CONTAINS kw)
+        RETURN DISTINCT
+               p1.article_no   AS src_article,
+               p3.article_no   AS ext_article,
+               p3.content_text AS ext_content
+        LIMIT $limit
+        """
+        with self._driver.session() as session:
+            result = session.run(query, keywords=keywords, limit=limit)
+            return [dict(r) for r in result]
 
     def get_legal_conflicts(
         self,

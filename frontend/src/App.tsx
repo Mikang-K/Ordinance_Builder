@@ -11,6 +11,7 @@ import LoadingModal from './components/LoadingModal'
 import CompletedDraftModal from './components/CompletedDraftModal'
 import QAPanel from './components/QAPanel'
 import OnboardingWizard from './components/OnboardingWizard'
+import TutorialOverlay from './components/TutorialOverlay'
 
 export default function App() {
   // ── 인증 상태 ──────────────────────────────────────────────────────────────
@@ -86,12 +87,42 @@ export default function App() {
   const [hasSession, setHasSession] = useState(false)
   const [ordinanceType, setOrdinanceType] = useState<string | null>(null)
 
+  // Tutorial state
+  const [tutorialStep, setTutorialStep] = useState(-1)   // -1 = inactive, 0~4 = active step
+  const TUTORIAL_KEY = 'ordinance_tutorial_completed'
+
   const sessionIdRef = useRef<string | null>(null)
   const [fontSize, setFontSize] = useState<number>(16)
 
   useEffect(() => {
     document.documentElement.style.fontSize = `${fontSize}px`
   }, [fontSize])
+
+  // Auto-trigger tutorial on first login
+  useEffect(() => {
+    if (user && !localStorage.getItem(TUTORIAL_KEY)) {
+      setTutorialStep(0)
+    }
+  }, [user])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-advance tutorial steps based on app state
+  useEffect(() => {
+    if (tutorialStep < 0) return
+    if (tutorialStep === 0 && isOnboardingOpen) { setTutorialStep(1); return }
+    if (tutorialStep === 1 && !isOnboardingOpen && stage === 'article_interviewing') { setTutorialStep(2); return }
+    if (tutorialStep === 2 && stage === 'draft_review') { setTutorialStep(3); return }
+    if (tutorialStep === 3 && stage === 'completed') { setTutorialStep(4); return }
+  }, [tutorialStep, isOnboardingOpen, stage])
+
+  const handleTutorialNext = () => {
+    setTutorialStep(-1)
+    localStorage.setItem(TUTORIAL_KEY, 'true')
+  }
+
+  const handleTutorialSkip = () => {
+    setTutorialStep(-1)
+    localStorage.setItem(TUTORIAL_KEY, 'true')
+  }
 
   const applyResponse = (res: {
     stage: string
@@ -325,12 +356,21 @@ export default function App() {
 
   if (view === 'list') {
     return (
-      <SessionListScreen
-        onSelectSession={handleSelectSession}
-        onNewSession={handleNewSession}
-        user={user}
-        onLogout={handleLogout}
-      />
+      <>
+        <SessionListScreen
+          onSelectSession={handleSelectSession}
+          onNewSession={handleNewSession}
+          user={user}
+          onLogout={handleLogout}
+        />
+        {tutorialStep >= 0 && (
+          <TutorialOverlay
+            step={tutorialStep}
+            onNext={handleTutorialNext}
+            onSkip={handleTutorialSkip}
+          />
+        )}
+      </>
     )
   }
 
@@ -395,6 +435,21 @@ export default function App() {
             style={{ padding: '6px 14px', background: '#1e40af', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}
           >
             ✚ 새 조례 만들기
+          </button>
+          <button
+            onClick={() => setTutorialStep(0)}
+            style={{
+              padding: '6px 12px',
+              background: 'rgba(255,255,255,0.15)',
+              border: '1px solid rgba(255,255,255,0.35)',
+              borderRadius: '8px',
+              color: '#ffffff',
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ? 도움말
           </button>
           <button className="reset-btn" onClick={handleReset}>목록</button>
           <div style={userInfoStyle}>
@@ -478,6 +533,14 @@ export default function App() {
       )}
 
       {isLoading && loadingMessage && <LoadingModal message={loadingMessage} />}
+
+      {tutorialStep >= 0 && (
+        <TutorialOverlay
+          step={tutorialStep}
+          onNext={handleTutorialNext}
+          onSkip={handleTutorialSkip}
+        />
+      )}
     </div>
   )
 }

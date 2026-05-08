@@ -153,6 +153,10 @@ def run() -> None:
         loader.build_defines_relationships()              # OWL: 정의하다
         loader.build_legal_term_subtypes()                # OWL: 권리주체/법적행위/객체 labels
         loader.build_conflicts_with_relationships()       # OWL: 상충하다 (last — depends on all above)
+        loader.build_limits_relationships()               # OWL: 제한하다 (DEFINES 이후)
+        loader.build_references_relationships()           # OWL: 인용하다
+        loader.build_enforces_relationships()             # OWL: 집행하다 (BASED_ON 이후)
+        loader.build_penalizes_relationships()            # OWL: 제재하다 (벌칙 조항 마지막)
 
         # ── 5. Bulk-embed all Provision nodes ─────────────────────────
         import os

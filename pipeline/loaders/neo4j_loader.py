@@ -231,6 +231,49 @@ ON CREATE SET r.source_article = op.article_no,
               r.confidence = 'heuristic'
 """
 
+_BUILD_LIMITS = """
+MATCH (lt:LegalTerm)
+CALL (lt) {
+    MATCH (p:Provision)
+    WHERE size(p.content_text) > 20
+      AND p.content_text CONTAINS lt.term_name
+      AND NOT (p)-[:LIMITS]->(lt)
+    MERGE (p)-[:LIMITS]->(lt)
+} IN TRANSACTIONS OF 50 ROWS
+"""
+
+_BUILD_REFERENCES = """
+MATCH (src:Provision)
+WHERE src.content_text IS NOT NULL
+  AND src.content_text =~ '.*제\\\\d+조.*'
+CALL (src) {
+    MATCH (src)<-[:CONTAINS]-(parent)
+    MATCH (parent)-[:CONTAINS]->(target:Provision)
+    WHERE target.id <> src.id
+      AND src.content_text CONTAINS target.article_no
+    MERGE (src)-[:REFERENCES]->(target)
+} IN TRANSACTIONS OF 100 ROWS
+"""
+
+_BUILD_ENFORCES = """
+MATCH (o:Ordinance)-[:BASED_ON]->(s:Statute)
+WHERE o.title CONTAINS '시행'
+MERGE (o)-[:ENFORCES]->(s)
+"""
+
+_BUILD_PENALIZES = """
+MATCH (penalty:Provision {is_penalty_clause: true})
+WHERE penalty.content_text CONTAINS '위반'
+CALL (penalty) {
+    MATCH (penalty)<-[:CONTAINS]-(parent)
+    MATCH (parent)-[:CONTAINS]->(target:Provision)
+    WHERE target.id <> penalty.id
+      AND target.is_penalty_clause = false
+      AND penalty.content_text CONTAINS target.article_no
+    MERGE (penalty)-[:PENALIZES]->(target)
+} IN TRANSACTIONS OF 100 ROWS
+"""
+
 _LABEL_RIGHTS_SUBJECTS = """
 MATCH (lt:LegalTerm)
 WHERE lt.term_name IN ['청년', '소상공인', '중소기업', '지방자치단체',
@@ -584,6 +627,51 @@ class Neo4jLoader:
             result = session.run(_BUILD_CONFLICTS_WITH)
             summary = result.consume()
         logger.info("CONFLICTS_WITH: created %d relationships", summary.counters.relationships_created)
+
+    def build_limits_relationships(self) -> None:
+        """
+        OWL: 제한하다 — Provision → LegalTerm.
+        Connects provisions that mention a legal term to that term node.
+        Run after build_defines_relationships (LegalTerm nodes must exist).
+        """
+        with self._driver.session() as session:
+            result = session.run(_BUILD_LIMITS)
+            summary = result.consume()
+        logger.info("LIMITS: created %d relationships", summary.counters.relationships_created)
+
+    def build_references_relationships(self) -> None:
+        """
+        OWL: 인용하다 — Provision → Provision (same-parent citations).
+        Detects '제N조' patterns within provision text and links to matching
+        sibling provisions under the same Statute/Ordinance parent.
+        """
+        with self._driver.session() as session:
+            result = session.run(_BUILD_REFERENCES)
+            summary = result.consume()
+        logger.info("REFERENCES: created %d relationships", summary.counters.relationships_created)
+
+    def build_enforces_relationships(self) -> None:
+        """
+        OWL: 집행하다 — Ordinance → Statute.
+        Marks ordinances with '시행' in title as enforcement ordinances.
+        Run after build_based_on_relationships.
+        """
+        with self._driver.session() as session:
+            result = session.run(_BUILD_ENFORCES)
+            summary = result.consume()
+        logger.info("ENFORCES: created %d relationships", summary.counters.relationships_created)
+
+    def build_penalizes_relationships(self) -> None:
+        """
+        OWL: 제재하다 — Provision → Provision.
+        Links penalty provisions to the article they penalize using
+        '위반' keyword + article_no pattern matching within the same parent.
+        Run last — depends on is_penalty_clause flags being set.
+        """
+        with self._driver.session() as session:
+            result = session.run(_BUILD_PENALIZES)
+            summary = result.consume()
+        logger.info("PENALIZES: created %d relationships", summary.counters.relationships_created)
 
     def upsert_legal_terms(self, terms: list[LegalTermNode]) -> None:
         """

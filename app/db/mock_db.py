@@ -195,6 +195,63 @@ class MockGraphDB(GraphDBInterface):
             for o in MOCK_ORDINANCES[:limit]
         ]
 
+    def get_analogy_applications(
+        self,
+        keywords: list[str],
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        # Mock returns empty — APPLIES_BY_ANALOGY is only populated by the pipeline.
+        return []
+
+    def get_superior_statute_provisions(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        # Mock returns empty — SUPERIOR_TO is only populated by the pipeline.
+        return []
+
+    def get_penalty_chain(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        # Mock returns empty — PENALIZES is only populated by the pipeline.
+        return []
+
+    def get_delegation_limits(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        # Mock returns empty — DELEGATES + LIMITS relations are only populated by the pipeline.
+        return []
+
+    def get_hierarchy_chain(
+        self,
+        keywords: list[str],
+        max_depth: int = 3,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        # Mock returns empty — SUPERIOR_TO multi-hop is only populated by the pipeline.
+        return []
+
+    def get_conflict_chain(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        # Mock returns empty — SUPERIOR_TO + LIMITS combo is only populated by the pipeline.
+        return []
+
+    def get_penalty_extension(
+        self,
+        keywords: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        # Mock returns empty — PENALIZES 2-hop is only populated by the pipeline.
+        return []
+
     def get_legal_conflicts(
         self,
         ordinance_id: str,

@@ -5,6 +5,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field
 
+from app.db.base import GraphDBInterface
 from app.graph.state import OrdinanceBuilderState
 from app.prompts.legal_checker import LEGAL_CHECKER_SYSTEM, build_legal_checker_human
 
@@ -37,6 +38,7 @@ class LegalCheckResult(BaseModel):
 async def legal_checker_node(
     state: OrdinanceBuilderState,
     llm: BaseChatModel,
+    db: GraphDBInterface | None = None,
 ) -> dict:
     """
     Node 5 – Legal Checker
@@ -44,7 +46,7 @@ async def legal_checker_node(
     Validates the ordinance draft against the retrieved statute provisions.
     Flags conflicts and rates their severity.
 
-    Input  State: draft_full_text, legal_basis
+    Input  State: draft_full_text, legal_basis, ordinance_info
     Output State: legal_issues, is_legally_valid, current_stage,
                   response_to_user, messages
     """
@@ -54,8 +56,63 @@ async def legal_checker_node(
     legal_basis: list[dict] = state.get("legal_basis") or []
     legal_terms: list[dict] = state.get("legal_terms") or []
 
-    logger.debug("[legal_checker] draft_len=%d | legal_basis=%d건", len(draft), len(legal_basis))
-    human_prompt = build_legal_checker_human(draft, legal_basis, legal_terms)
+    # Extract keyword list from ordinance_info for graph queries
+    ordinance_info: dict = state.get("ordinance_info") or {}
+    keywords = [
+        v for k, v in ordinance_info.items()
+        if v and k in ("purpose", "target_group", "support_type", "industry_sector")
+    ]
+
+    # SUPERIOR_TO path — hierarchy provisions for stricter legal compliance check
+    superior_provisions: list[dict] = []
+    if db and keywords:
+        try:
+            superior_provisions = db.get_superior_statute_provisions(keywords=keywords)
+        except Exception as exc:
+            logger.debug("get_superior_statute_provisions 생략: %s", exc)
+
+    # PENALIZES path — penalty chain coverage check
+    penalty_chain: list[dict] = []
+    if db and keywords:
+        try:
+            penalty_chain = db.get_penalty_chain(keywords=keywords)
+        except Exception as exc:
+            logger.debug("get_penalty_chain 생략: %s", exc)
+
+    # SWRL Rule 2 — 위계 전이성: 조례가 속하는 위계 체계 전체 파악
+    hierarchy_chain: list[dict] = []
+    if db and keywords:
+        try:
+            hierarchy_chain = db.get_hierarchy_chain(keywords=keywords)
+        except Exception as exc:
+            logger.debug("get_hierarchy_chain 생략: %s", exc)
+
+    # SWRL Rule 3 — 충돌 연쇄: 상위법·조례가 동일 법률 용어를 동시 제한할 때 충돌 가능성
+    conflict_chain: list[dict] = []
+    if db and keywords:
+        try:
+            conflict_chain = db.get_conflict_chain(keywords=keywords)
+        except Exception as exc:
+            logger.debug("get_conflict_chain 생략: %s", exc)
+
+    # SWRL Rule 4 — 벌칙 범위 확장: 2단계 벌칙 체인으로 간접 제재 범위 파악
+    penalty_extension: list[dict] = []
+    if db and keywords:
+        try:
+            penalty_extension = db.get_penalty_extension(keywords=keywords)
+        except Exception as exc:
+            logger.debug("get_penalty_extension 생략: %s", exc)
+
+    logger.debug(
+        "[legal_checker] draft_len=%d | legal_basis=%d건 | superior=%d건 | penalty=%d건"
+        " | hierarchy=%d건 | conflict=%d건 | penalty_ext=%d건",
+        len(draft), len(legal_basis), len(superior_provisions), len(penalty_chain),
+        len(hierarchy_chain), len(conflict_chain), len(penalty_extension),
+    )
+    human_prompt = build_legal_checker_human(
+        draft, legal_basis, legal_terms, superior_provisions, penalty_chain,
+        hierarchy_chain, conflict_chain, penalty_extension,
+    )
     result: LegalCheckResult = await structured_llm.ainvoke(
         [("system", LEGAL_CHECKER_SYSTEM), ("human", human_prompt)]
     )
