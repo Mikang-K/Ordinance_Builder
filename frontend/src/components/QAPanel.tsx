@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import type { QAMessage, QASource, Stage } from '../types'
 import { askQuestion, searchDirectQuestion } from '../api'
 
@@ -58,6 +58,75 @@ function SourceItem({ source }: { source: QASource }) {
   )
 }
 
+// Renders **bold**, *italic*, and paragraph/list structure
+function renderMarkdown(text: string): React.ReactNode {
+  const lines = text.split('\n')
+  const nodes: React.ReactNode[] = []
+  let keyIdx = 0
+
+  const renderInline = (line: string): React.ReactNode => {
+    const parts: React.ReactNode[] = []
+    const re = /(\*\*(.+?)\*\*|\*(.+?)\*)/g
+    let last = 0, m: RegExpExecArray | null
+    while ((m = re.exec(line)) !== null) {
+      if (m.index > last) parts.push(line.slice(last, m.index))
+      if (m[2] !== undefined) parts.push(<strong key={keyIdx++}>{m[2]}</strong>)
+      else if (m[3] !== undefined) parts.push(<em key={keyIdx++}>{m[3]}</em>)
+      last = m.index + m[0].length
+    }
+    if (last < line.length) parts.push(line.slice(last))
+    return parts
+  }
+
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    const trimmed = line.trim()
+
+    if (!trimmed) { nodes.push(<div key={keyIdx++} style={{ height: '0.4em' }} />); i++; continue }
+
+    // Heading: ## or ###
+    if (/^#{1,3} /.test(trimmed)) {
+      const level = (trimmed.match(/^#+/)![0].length)
+      const content = trimmed.replace(/^#+\s*/, '')
+      const fs = level === 1 ? '1rem' : level === 2 ? '0.92rem' : '0.87rem'
+      nodes.push(
+        <div key={keyIdx++} style={{ fontWeight: 700, fontSize: fs, color: '#1e293b', marginTop: '8px', marginBottom: '2px', borderBottom: level <= 2 ? '1px solid #e2e8f0' : undefined, paddingBottom: level <= 2 ? '3px' : undefined }}>
+          {renderInline(content)}
+        </div>
+      )
+      i++; continue
+    }
+
+    // Bullet list block
+    if (/^[-•*] /.test(trimmed)) {
+      const items: React.ReactNode[] = []
+      while (i < lines.length && /^[-•*] /.test(lines[i].trim())) {
+        items.push(<li key={keyIdx++} style={{ marginBottom: '3px' }}>{renderInline(lines[i].trim().slice(2))}</li>)
+        i++
+      }
+      nodes.push(<ul key={keyIdx++} style={{ margin: '4px 0', paddingLeft: '18px', lineHeight: 1.65 }}>{items}</ul>)
+      continue
+    }
+
+    // Numbered list block
+    if (/^\d+[.)]\s/.test(trimmed)) {
+      const items: React.ReactNode[] = []
+      while (i < lines.length && /^\d+[.)]\s/.test(lines[i].trim())) {
+        items.push(<li key={keyIdx++} style={{ marginBottom: '3px' }}>{renderInline(lines[i].trim().replace(/^\d+[.)]\s*/, ''))}</li>)
+        i++
+      }
+      nodes.push(<ol key={keyIdx++} style={{ margin: '4px 0', paddingLeft: '20px', lineHeight: 1.65 }}>{items}</ol>)
+      continue
+    }
+
+    nodes.push(<p key={keyIdx++} style={{ margin: '0 0 4px' }}>{renderInline(line)}</p>)
+    i++
+  }
+
+  return <>{nodes}</>
+}
+
 function QAMessageBubble({
   msg, currentArticleKey, stage, onApply,
 }: {
@@ -83,10 +152,9 @@ function QAMessageBubble({
         border: isUser ? 'none' : '1px solid #e2e8f0',
         fontSize: '0.88rem',
         lineHeight: '1.6',
-        whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
       }}>
-        {msg.text}
+        {isUser ? msg.text : renderMarkdown(msg.text)}
       </div>
 
       {!isUser && msg.sources && msg.sources.length > 0 && (
