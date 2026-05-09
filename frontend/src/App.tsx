@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import type { LegalIssue, QAMessage, SimilarOrdinance, Stage } from './types'
 import { createSession, sendMessage, finalizeSession, getSessionState, submitArticlesBatch } from './api'
 import { auth, loginWithGoogle, logout, onAuthStateChanged, getRedirectResult } from './firebase'
@@ -328,8 +328,12 @@ export default function App() {
     }
   }
 
-  const mappedArticles = currentArticleKey ? [currentArticleKey, ...articleQueue] : []
+  const mappedArticles = useMemo(
+    () => currentArticleKey ? [currentArticleKey, ...articleQueue] : [],
+    [currentArticleKey, articleQueue]
+  )
   const isArticleModalOpen = stage === 'article_interviewing' && mappedArticles.length > 0
+  const handleQAContentApplied = useCallback(() => setPendingQAContent(null), [])
 
   // ── 인증 게이트 ────────────────────────────────────────────────────────────
   if (authLoading) {
@@ -531,7 +535,7 @@ export default function App() {
           onFontSizeChange={setFontSize}
           similarOrdinances={similarOrdinances}
           pendingQAContent={pendingQAContent}
-          onQAContentApplied={() => setPendingQAContent(null)}
+          onQAContentApplied={handleQAContentApplied}
           onOpenQA={() => {/* QA panel is always visible */}}
         />
       )}
