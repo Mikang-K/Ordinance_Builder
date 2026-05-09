@@ -107,7 +107,7 @@ export default function ArticleItemsModal({
     }
   }, [definitions]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pre-fill from QA panel "apply" action
+  // Pre-fill from QA panel "apply" action — no confirm needed (user clicked intentionally)
   useEffect(() => {
     if (!pendingQAContent) return
     const currentKey = articles[currentIndex]
@@ -115,9 +115,7 @@ export default function ArticleItemsModal({
       onQAContentApplied?.()
       return
     }
-    if (window.confirm(`Q&A 답변 내용을 '${currentKey}' 조항에 적용하시겠습니까?\n\n기존 입력 내용이 대체됩니다.`)) {
-      setValues((prev) => ({ ...prev, [currentKey]: pendingQAContent }))
-    }
+    setValues((prev) => ({ ...prev, [currentKey]: pendingQAContent }))
     onQAContentApplied?.()
   }, [pendingQAContent, currentIndex, articles, onQAContentApplied])
 
