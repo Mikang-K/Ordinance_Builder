@@ -125,6 +125,8 @@ class QARequest(BaseModel):
 
 class QADirectRequest(BaseModel):
     question: str = Field(..., max_length=500, description="직접 검색 질문 — 세션 컨텍스트 없이 DB 전체 벡터 검색")
+    current_article_key: Optional[str] = Field(None, description="현재 작성 중인 조항 키 (article_interviewing 단계에서 전달 시 applicable_content 생성)")
+    ordinance_info: Optional[dict] = Field(None, description="조례 기본 정보 (지역·목적·대상 등). applicable_content 품질 향상용")
 
 
 class QAResponse(BaseModel):

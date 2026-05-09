@@ -6,6 +6,7 @@ import type { User } from '../firebase'
 interface Props {
   onSelectSession: (sessionId: string) => void
   onNewSession: () => void
+  onTutorial?: () => void
   user?: User | null
   onLogout?: () => void
 }
@@ -33,7 +34,7 @@ function formatDate(iso: string): string {
   })
 }
 
-export default function SessionListScreen({ onSelectSession, onNewSession, user, onLogout }: Props) {
+export default function SessionListScreen({ onSelectSession, onNewSession, onTutorial, user, onLogout }: Props) {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -77,9 +78,31 @@ export default function SessionListScreen({ onSelectSession, onNewSession, user,
         )}
         <h1 className="session-list-title">조례 빌더 AI</h1>
         <p className="session-list-subtitle">지방 조례 초안 자동 생성 서비스</p>
-        <button id="btn-new-session" className="new-session-btn" onClick={onNewSession}>
-          + 새 조례 만들기
-        </button>
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button id="btn-new-session" className="new-session-btn" onClick={onNewSession}>
+            + 새 조례 만들기
+          </button>
+          {onTutorial && (
+            <button
+              onClick={onTutorial}
+              style={{
+                padding: '12px 24px',
+                background: 'rgba(255,255,255,0.15)',
+                border: '1.5px solid rgba(255,255,255,0.5)',
+                borderRadius: '10px',
+                color: '#ffffff',
+                fontSize: '0.95rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.25)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
+            >
+              📖 튜토리얼 보기
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="session-list-body">

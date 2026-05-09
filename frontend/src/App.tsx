@@ -11,7 +11,7 @@ import LoadingModal from './components/LoadingModal'
 import CompletedDraftModal from './components/CompletedDraftModal'
 import QAPanel from './components/QAPanel'
 import OnboardingWizard from './components/OnboardingWizard'
-import TutorialOverlay from './components/TutorialOverlay'
+import TutorialOverlay, { TUTORIAL_STEP_COUNT } from './components/TutorialOverlay'
 
 export default function App() {
   // ── 인증 상태 ──────────────────────────────────────────────────────────────
@@ -123,8 +123,16 @@ export default function App() {
   }, [tutorialStep, isOnboardingOpen, stage])
 
   const handleTutorialNext = () => {
-    setTutorialStep(-1)
-    localStorage.setItem(TUTORIAL_KEY, 'true')
+    if (tutorialStep >= TUTORIAL_STEP_COUNT - 1) {
+      setTutorialStep(-1)
+      localStorage.setItem(TUTORIAL_KEY, 'true')
+    } else {
+      setTutorialStep(s => s + 1)
+    }
+  }
+
+  const handleTutorialPrev = () => {
+    setTutorialStep(s => Math.max(0, s - 1))
   }
 
   const handleTutorialSkip = () => {
@@ -368,6 +376,7 @@ export default function App() {
         <SessionListScreen
           onSelectSession={handleSelectSession}
           onNewSession={handleNewSession}
+          onTutorial={() => setTutorialStep(0)}
           user={user}
           onLogout={handleLogout}
         />
@@ -375,6 +384,7 @@ export default function App() {
           <TutorialOverlay
             step={tutorialStep}
             onNext={handleTutorialNext}
+            onPrev={handleTutorialPrev}
             onSkip={handleTutorialSkip}
           />
         )}
@@ -434,6 +444,7 @@ export default function App() {
             </button>
           )}
           <button
+            id="btn-new-session-header"
             onClick={() => {
               if (hasSession && window.confirm('현재 진행 중인 조례 작업이 있습니다. 새로 시작하시겠습니까?')) {
                 resetState()
@@ -546,6 +557,7 @@ export default function App() {
         <TutorialOverlay
           step={tutorialStep}
           onNext={handleTutorialNext}
+          onPrev={handleTutorialPrev}
           onSkip={handleTutorialSkip}
         />
       )}

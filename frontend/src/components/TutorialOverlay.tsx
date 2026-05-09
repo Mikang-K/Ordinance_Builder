@@ -11,9 +11,11 @@ interface StepConfig {
   nextLabel: string
 }
 
+export const TUTORIAL_STEP_COUNT = 5
+
 const TUTORIAL_STEPS: StepConfig[] = [
   {
-    targetSelector: '#btn-new-session',
+    targetSelector: '#btn-new-session, #btn-new-session-header',
     title: '조례 작성을 시작해 볼까요?',
     description: '이 버튼을 눌러 새 조례 작성을 시작하세요. 마법사가 단계별로 안내해 드립니다.',
     placement: 'bottom',
@@ -150,6 +152,7 @@ function TooltipCard({
   config,
   targetRect,
   onNext,
+  onPrev,
   onSkip,
 }: {
   step: number
@@ -157,10 +160,37 @@ function TooltipCard({
   config: StepConfig
   targetRect: DOMRect | null
   onNext: () => void
+  onPrev: () => void
   onSkip: () => void
 }) {
+  const isFirst = step === 0
   const isLast = step === total - 1
   const showArrowTop = config.placement === 'bottom' && !!targetRect
+
+  const navBtnBase: React.CSSProperties = {
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    border: '1.5px solid #e2e8f0',
+    background: '#ffffff',
+    color: '#1e40af',
+    fontSize: '1rem',
+    fontWeight: 700,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    lineHeight: 1,
+    transition: 'all 0.15s',
+    flexShrink: 0,
+  }
+
+  const navBtnDisabled: React.CSSProperties = {
+    ...navBtnBase,
+    color: '#cbd5e1',
+    cursor: 'default',
+    border: '1.5px solid #f1f5f9',
+  }
 
   return (
     <div
@@ -183,24 +213,51 @@ function TooltipCard({
         {config.description}
       </p>
 
-      <div className="tutorial-dots">
-        {Array.from({ length: total }, (_, i) => (
-          <div key={i} className={`tutorial-dot${i === step ? ' active' : ''}`} />
-        ))}
-      </div>
-
-      {isLast ? (
-        <button className="tutorial-btn-next" onClick={onNext}>
-          {config.nextLabel} ✓
+      {/* Navigation row: ← dots → */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px' }}>
+        <button
+          onClick={isFirst ? undefined : onPrev}
+          style={isFirst ? navBtnDisabled : navBtnBase}
+          disabled={isFirst}
+          title="이전 단계"
+        >
+          ←
         </button>
-      ) : (
-        <p style={{
-          fontSize: '0.78rem', color: '#94a3b8',
-          margin: '12px 0 0', textAlign: 'center', lineHeight: 1.5,
-        }}>
-          각 단계를 완료하면 자동으로 다음으로 넘어갑니다
-        </p>
-      )}
+
+        <div className="tutorial-dots" style={{ margin: 0 }}>
+          {Array.from({ length: total }, (_, i) => (
+            <div key={i} className={`tutorial-dot${i === step ? ' active' : ''}`} />
+          ))}
+        </div>
+
+        {isLast ? (
+          <button
+            onClick={onNext}
+            style={{
+              ...navBtnBase,
+              width: 'auto',
+              padding: '0 12px',
+              borderRadius: '16px',
+              background: '#1e40af',
+              color: '#ffffff',
+              border: 'none',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+            }}
+            title={config.nextLabel}
+          >
+            완료 ✓
+          </button>
+        ) : (
+          <button
+            onClick={onNext}
+            style={navBtnBase}
+            title="다음 단계"
+          >
+            →
+          </button>
+        )}
+      </div>
 
       {!isLast && (
         <button className="tutorial-btn-skip" onClick={onSkip}>
@@ -216,10 +273,11 @@ function TooltipCard({
 interface Props {
   step: number        // 0~4 active; -1 = inactive
   onNext: () => void
+  onPrev: () => void
   onSkip: () => void
 }
 
-export default function TutorialOverlay({ step, onNext, onSkip }: Props) {
+export default function TutorialOverlay({ step, onNext, onPrev, onSkip }: Props) {
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
   const config = TUTORIAL_STEPS[step]
 
@@ -249,10 +307,12 @@ export default function TutorialOverlay({ step, onNext, onSkip }: Props) {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onSkip()
+      if (e.key === 'ArrowRight' && step < TUTORIAL_STEPS.length - 1) onNext()
+      if (e.key === 'ArrowLeft' && step > 0) onPrev()
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [onSkip])
+  }, [step, onNext, onPrev, onSkip])
 
   if (step < 0 || step >= TUTORIAL_STEPS.length || !config) return null
 
@@ -267,6 +327,7 @@ export default function TutorialOverlay({ step, onNext, onSkip }: Props) {
         config={config}
         targetRect={targetRect}
         onNext={onNext}
+        onPrev={onPrev}
         onSkip={onSkip}
       />
     </>

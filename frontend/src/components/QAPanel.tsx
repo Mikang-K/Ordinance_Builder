@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { QAMessage, QASource, Stage } from '../types'
-import { searchDirectQuestion } from '../api'
+import { askQuestion, searchDirectQuestion } from '../api'
 
 interface Props {
   sessionId: string | null
@@ -140,7 +140,16 @@ export default function QAPanel({
     onAddMessages([userMsg])
 
     try {
-      const res = await searchDirectQuestion(q)
+      let res
+      if (sessionId) {
+        try {
+          res = await askQuestion(sessionId, q)
+        } catch {
+          res = await searchDirectQuestion(q, { current_article_key: currentArticleKey })
+        }
+      } else {
+        res = await searchDirectQuestion(q, { current_article_key: currentArticleKey })
+      }
       const aiMsg: QAMessage = {
         role: 'ai',
         text: res.answer,
@@ -178,7 +187,7 @@ export default function QAPanel({
           <span style={{ fontSize: '1rem' }}>🔍</span>
           <h2 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>법령 Q&amp;A</h2>
         </div>
-        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>전체 DB 벡터 검색</span>
+        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{sessionId ? '세션 법령 우선' : '전체 DB 벡터 검색'}</span>
       </div>
 
       {/* Message history */}
@@ -188,8 +197,10 @@ export default function QAPanel({
             <p style={{ fontSize: '1.8rem', marginBottom: '12px' }}>⚖️</p>
             <p style={{ fontSize: '0.9rem', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>법령 기반 Q&amp;A</p>
             <p style={{ fontSize: '0.82rem', lineHeight: 1.6 }}>
-              질문을 임베딩하여 법령·조례 전체 DB를 벡터 검색합니다.<br />
-              어떤 법령이든 자유롭게 질문할 수 있습니다.
+              {sessionId
+                ? <>세션 생성 시 수집한 법령을 우선 참조하여 답변합니다.<br />해당 조례에 최적화된 법령 근거로 질문하세요.</>
+                : <>질문을 임베딩하여 법령·조례 전체 DB를 벡터 검색합니다.<br />어떤 법령이든 자유롭게 질문할 수 있습니다.</>
+              }
             </p>
           </div>
         )}

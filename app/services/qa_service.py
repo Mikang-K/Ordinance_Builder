@@ -45,6 +45,8 @@ async def direct_search_qa(
     question: str,
     db: GraphDBInterface | None,
     llm,
+    current_article_key: str | None = None,
+    ordinance_info: dict | None = None,
 ) -> tuple[QAOutput, list[dict], list[dict], list[dict]]:
     """
     질문 유형을 LLM으로 먼저 분류한 뒤, 필요한 경우에만 Neo4j 벡터 검색을 수행합니다.
@@ -92,6 +94,8 @@ async def direct_search_qa(
         legal_basis=legal_basis,
         legal_terms=legal_terms,
         similar_ordinances=similar_ordinances if similar_ordinances else None,
+        current_article_key=current_article_key,
+        ordinance_info=ordinance_info,
     )
 
     structured_llm = llm.with_structured_output(QAOutput)

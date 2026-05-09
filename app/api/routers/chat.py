@@ -513,19 +513,31 @@ async def qa_chat(
     keywords = _extract_qa_keywords(body.question, ordinance_info)
     support_type = ordinance_info.get("support_type", "")
 
-    # 3. GraphRAG 병렬 검색 (DB 없으면 degraded mode)
+    # 3. GraphRAG 검색: 체크포인트 캐시 우선 → fresh 검색 fallback
     db = get_db()
     legal_basis: list[dict] = []
     legal_terms: list[dict] = []
 
-    if db:
-        try:
-            legal_basis, legal_terms = await asyncio.gather(
-                asyncio.to_thread(db.find_legal_basis, keywords, support_type),
-                asyncio.to_thread(db.find_legal_terms, keywords),
-            )
-        except Exception:
-            logger.warning("GraphRAG DB 검색 실패 — LLM 단독 답변으로 계속")
+    cached_legal_basis = values.get("legal_basis") or []
+
+    if cached_legal_basis:
+        # 1순위: 세션 생성 시 graph_retriever가 수집한 법령 (해당 조례에 최적화)
+        legal_basis = cached_legal_basis
+        if db:
+            try:
+                legal_terms = await asyncio.to_thread(db.find_legal_terms, keywords)
+            except Exception:
+                logger.warning("법률 용어 검색 실패 — 용어 없이 계속")
+    else:
+        # 2순위: 캐시 없으면 fresh 키워드 검색 (기존 동작)
+        if db:
+            try:
+                legal_basis, legal_terms = await asyncio.gather(
+                    asyncio.to_thread(db.find_legal_basis, keywords, support_type),
+                    asyncio.to_thread(db.find_legal_terms, keywords),
+                )
+            except Exception:
+                logger.warning("GraphRAG DB 검색 실패 — LLM 단독 답변으로 계속")
 
     # 4. 조항 예시 필터링 (캐시 재사용, article_interviewing 단계만)
     article_ex: list[dict] = []
@@ -594,6 +606,8 @@ async def qa_direct(
             question=body.question,
             db=db,
             llm=get_llm(settings.LLM_INTENT),
+            current_article_key=body.current_article_key,
+            ordinance_info=body.ordinance_info,
         )
     except Exception as exc:
         logger.exception("직접 QA LLM 호출 실패")
@@ -628,6 +642,6 @@ async def qa_direct(
     return QAResponse(
         answer=result.answer,
         sources=sources,
-        applicable_content=None,
-        applicable_article_key=None,
+        applicable_content=result.applicable_content,
+        applicable_article_key=result.applicable_article_key,
     )

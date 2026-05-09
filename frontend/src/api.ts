@@ -111,11 +111,12 @@ export async function askQuestion(
 
 export async function searchDirectQuestion(
   question: string,
+  context?: { current_article_key?: string | null; ordinance_info?: Record<string, string> | null },
 ): Promise<QAResponse> {
   const res = await fetch('/api/v1/qa', {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, ...context }),
   })
   if (!res.ok) throw new Error(`직접 검색 Q&A 요청 실패: ${res.status}`)
   return res.json()
