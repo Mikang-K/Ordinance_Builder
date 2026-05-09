@@ -104,8 +104,11 @@ def build_qa_human(
     if current_article_key:
         lines.append(
             f"\napplicable_content는 질문이 '{current_article_key}' 조항 작성과 직접 관련될 때만 "
-            "해당 조항에 바로 삽입할 수 있는 조례 텍스트를 생성하세요. 무관하면 null로 두세요."
+            "해당 조항에 바로 삽입할 수 있는 조례 텍스트를 생성하세요. 무관하면 null로 두세요. "
+            f"applicable_article_key는 관련 시 '{current_article_key}'로 설정하세요."
         )
+    else:
+        lines.append("\napplicable_content와 applicable_article_key는 null로 두세요.")
 
     return "\n".join(lines)
 
