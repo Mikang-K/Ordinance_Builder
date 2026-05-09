@@ -25,9 +25,14 @@ CREATE TABLE IF NOT EXISTS sessions (
     stage           TEXT        NOT NULL DEFAULT 'intent_analysis',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     chat_history    JSONB       NOT NULL DEFAULT '[]'::jsonb,
+    qa_history      JSONB       NOT NULL DEFAULT '[]'::jsonb,
     initial_message TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id);
+"""
+
+_MIGRATE_SQL = """
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS qa_history JSONB NOT NULL DEFAULT '[]'::jsonb;
 """
 
 _pool: AsyncConnectionPool | None = None
@@ -45,6 +50,7 @@ async def init_db() -> None:
     await _pool.open()
     async with _pool.connection() as conn:
         await conn.execute(_CREATE_TABLE_SQL)
+        await conn.execute(_MIGRATE_SQL)
         await conn.commit()
     logger.info("sessions 테이블 및 커넥션 풀 초기화 완료")
 
@@ -112,6 +118,15 @@ async def delete_session(session_id: str) -> bool:
         )
         await conn.commit()
     return result.rowcount > 0
+
+
+async def save_qa_history(session_id: str, qa_history: list[dict]) -> None:
+    async with _pool.connection() as conn:
+        await conn.execute(
+            "UPDATE sessions SET qa_history = %s::jsonb WHERE session_id = %s",
+            (json.dumps(qa_history, ensure_ascii=False), session_id),
+        )
+        await conn.commit()
 
 
 async def update_session(

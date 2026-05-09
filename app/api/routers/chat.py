@@ -15,6 +15,7 @@ from app.api.schemas import (
     FinalizeResponse,
     MessageRecord,
     QADirectRequest,
+    QAMessageRecord,
     QARequest,
     QAResponse,
     QASource,
@@ -33,6 +34,7 @@ from app.db.session_store import (
     delete_session as db_delete_session,
     get_session as db_get_session,
     list_sessions_by_user,
+    save_qa_history as db_save_qa_history,
     update_session as db_update_session,
 )
 from app.graph.nodes._article_examples import find_article_examples
@@ -190,6 +192,7 @@ async def get_session_state(
 
     chat_history = entry.get("chat_history") or []
 
+    qa_history_data = entry.get("qa_history") or []
     return SessionStateResponse(
         session_id=sid,
         title=entry["title"],
@@ -205,6 +208,7 @@ async def get_session_state(
         article_queue=values.get("article_queue"),
         current_article_key=values.get("current_article_key"),
         ordinance_type=values.get("ordinance_type"),
+        qa_history=[QAMessageRecord(**m) for m in qa_history_data] or None,
     )
 
 
@@ -582,6 +586,21 @@ async def qa_chat(
             content=lt.get("definition", "")[:200],
             relation_type="DEFINES",
         ))
+
+    # QA 교환 내역을 DB에 저장 (세션 복원 시 복구 가능하도록)
+    try:
+        qa_history = list(entry.get("qa_history") or [])
+        qa_history.append({"role": "user", "text": body.question})
+        qa_history.append({
+            "role": "ai",
+            "text": result.answer,
+            "sources": [s.model_dump() for s in sources],
+            "applicable_content": result.applicable_content,
+            "applicable_article_key": result.applicable_article_key,
+        })
+        await db_save_qa_history(sid, qa_history)
+    except Exception:
+        logger.warning("QA 내역 저장 실패 (session_id=%s) — 답변은 정상 반환", sid)
 
     return QAResponse(
         answer=result.answer,

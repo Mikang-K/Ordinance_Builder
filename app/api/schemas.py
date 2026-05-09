@@ -20,6 +20,14 @@ class SessionSummary(BaseModel):
     created_at: str
 
 
+class QAMessageRecord(BaseModel):
+    role: str  # "user" | "ai"
+    text: str
+    sources: Optional[list] = None
+    applicable_content: Optional[str] = None
+    applicable_article_key: Optional[str] = None
+
+
 class SessionStateResponse(BaseModel):
     session_id: str
     title: str
@@ -33,6 +41,7 @@ class SessionStateResponse(BaseModel):
     article_queue: Optional[list[str]] = None
     current_article_key: Optional[str] = None
     ordinance_type: Optional[str] = None
+    qa_history: Optional[list[QAMessageRecord]] = None
 
 
 class SessionCreateRequest(BaseModel):

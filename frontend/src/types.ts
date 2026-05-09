@@ -91,6 +91,7 @@ export interface SessionStateResponse {
   article_queue?: string[] | null
   current_article_key?: string | null
   ordinance_type?: string | null
+  qa_history?: QAMessage[] | null
 }
 
 export interface QASource {

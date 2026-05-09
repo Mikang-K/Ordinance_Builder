@@ -1550,5 +1550,34 @@ python -m pipeline.scripts.migrate_relations            # 실제 MERGE
 
 ---
 
+### 31. QA 내역 영속 저장 (2026-05-09)
+
+**기능**: QA 패널에서 주고받은 Q&A 내역을 PostgreSQL에 저장해 세션 복원 시 복구.
+
+**변경 파일 (5곳)**:
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `app/db/session_store.py` | `qa_history` JSONB 컬럼 추가 / `_MIGRATE_SQL` (ALTER TABLE IF NOT EXISTS) / `save_qa_history()` 함수 추가 |
+| `app/api/schemas.py` | `QAMessageRecord` Pydantic 모델 추가 / `SessionStateResponse`에 `qa_history` 필드 추가 |
+| `app/api/routers/chat.py` | `qa_chat` 엔드포인트: 답변 후 user+ai 쌍을 `db_save_qa_history`로 저장 (try/except — 저장 실패 시 답변은 정상 반환) / `get_session_state`: `qa_history` 포함 반환 |
+| `frontend/src/types.ts` | `SessionStateResponse`에 `qa_history?: QAMessage[] \| null` 추가 |
+| `frontend/src/App.tsx` | `handleSelectSession`: `state.qa_history != null` 시 `setQaHistory` 호출 |
+
+**저장 구조** (JSONB 배열):
+```json
+[
+  {"role": "user", "text": "질문 내용"},
+  {"role": "ai", "text": "답변", "sources": [...], "applicable_content": "...", "applicable_article_key": "..."}
+]
+```
+
+**체크리스트**:
+- `save_qa_history`는 전체 배열을 덮어쓰는 방식 — append는 caller가 담당
+- 저장 실패는 warning 로그만 남기고 QA 응답은 정상 반환 (graceful degradation)
+- 기존 테이블에는 `_MIGRATE_SQL`로 자동 컬럼 추가 (`init_db` 시 실행)
+
+---
+
 # 코드 작성 규칙
 - 에러 수정 작업 후에는 반드시 수정 내역을 CLAUDE.md에 기록해 놓고 다시 같은 에러가 발생하지 않도록 할 것.

@@ -291,6 +291,7 @@ export default function App() {
       if (state.article_queue != null) setArticleQueue(state.article_queue)
       if (state.current_article_key !== undefined) setCurrentArticleKey(state.current_article_key)
       if (state.ordinance_type != null) setOrdinanceType(state.ordinance_type)
+      if (state.qa_history != null) setQaHistory(state.qa_history)
 
       if (state.stage === 'completed') {
         if (state.draft) setCompletedDraft(state.draft)
