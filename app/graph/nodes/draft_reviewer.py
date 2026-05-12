@@ -45,6 +45,10 @@ async def draft_reviewer_node(
     draft_full_text: str = state.get("draft_full_text") or ""
     draft_articles: list[dict] = state.get("draft_articles") or []
 
+    # SWRL Rules 2-4: graph_retriever에서 사전 계산 후 State에 저장된 값을 읽음
+    hierarchy_chain: list[dict] = state.get("hierarchy_chain") or []
+    conflict_chain: list[dict] = state.get("conflict_chain") or []
+
     # Step 1: Classify user intent (confirm vs revise)
     classifier_llm = llm.with_structured_output(ReviewDecision)
     logger.debug("[draft_reviewer] user_input=%r", user_input)
@@ -69,7 +73,11 @@ async def draft_reviewer_node(
     reviser_llm = llm.with_structured_output(OrdinanceDraft)
     revised: OrdinanceDraft = await reviser_llm.ainvoke([
         ("system", DRAFT_REVISION_SYSTEM),
-        ("human", build_draft_revision_human(user_input, draft_full_text, draft_articles)),
+        ("human", build_draft_revision_human(
+            user_input, draft_full_text, draft_articles,
+            hierarchy_chain=hierarchy_chain,
+            conflict_chain=conflict_chain,
+        )),
     ])
 
     preview = "\n\n".join(

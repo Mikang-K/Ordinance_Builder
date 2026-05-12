@@ -1,5 +1,6 @@
 from langchain_core.messages import AIMessage, HumanMessage
 
+from app.core.ontology_context import OntologyContext
 from app.graph.nodes._article_examples import find_article_examples, format_examples_block
 from app.graph.nodes.article_planner import ARTICLE_TEMPLATES, DEFAULT_ARTICLE_ORDER
 from app.graph.state import OrdinanceBuilderState
@@ -7,8 +8,38 @@ from app.graph.state import OrdinanceBuilderState
 # Keywords the user can type to skip an article (AI will fill it automatically)
 _SKIP_KEYWORDS = {"기본값", "기본값 사용", "skip", "스킵", "넘기기", "다음", "자동"}
 
+# 조항키 → 온톨로지 검색 키워드 매핑
+ARTICLE_ONTOLOGY_KEYWORDS: dict[str, list[str]] = {
+    "목적":       ["목적", "공익", "활성화"],
+    "정의":       ["정의", "청년", "창업", "지원"],
+    "지원대상":   ["자격", "지원대상", "청년"],
+    "지원내용":   ["보조금", "지원", "급부"],
+    "지원금액":   ["한도", "지원금", "예산"],
+    "신청방법":   ["신청", "접수", "서류"],
+    "심사선정":   ["심사", "선정", "위원회"],
+    "환수제재":   ["환수", "제재", "벌칙", "과태료"],
+    "위임":       ["위임", "규칙", "시행"],
+    "설치":       ["설치", "기관", "소속"],
+    "구성":       ["위원", "임기", "구성"],
+    "직무":       ["직무", "권한", "의결"],
+    "운영":       ["운영", "회의", "정족수"],
+    "간사":       ["간사", "사무", "공무원"],
+    "적용범위":   ["적용", "범위", "시설"],
+    "관리책임":   ["관리", "책임", "위탁"],
+    "사용허가":   ["허가", "신청", "취소"],
+    "사용료":     ["사용료", "감면", "징수"],
+    "위반제재":   ["과태료", "위반", "제재"],
+    "서비스내용": ["서비스", "돌봄", "급여"],
+    "제공기관":   ["제공기관", "위탁", "지정"],
+    "신청접수":   ["신청", "접수", "자격"],
+    "비용":       ["비용", "본인부담", "감면"],
+}
 
-def article_interviewer_node(state: OrdinanceBuilderState) -> dict:
+
+async def article_interviewer_node(
+    state: OrdinanceBuilderState,
+    ontology_ctx: OntologyContext | None = None,
+) -> dict:
     """
     Node: Article Interviewer  (deterministic, no LLM)
 
@@ -78,12 +109,19 @@ def article_interviewer_node(state: OrdinanceBuilderState) -> dict:
         find_article_examples(next_key, article_examples)
     )
 
+    # 온톨로지 힌트 조회 (다음 조항에만, 빈 결과 시 블록 미표시)
+    ontology_hints_block = ""
+    if ontology_ctx and next_key in ARTICLE_ONTOLOGY_KEYWORDS:
+        hint_kw = ARTICLE_ONTOLOGY_KEYWORDS[next_key]
+        ontology_hints_block = await ontology_ctx.get_article_hints(next_key, hint_kw)
+
     response = (
         f"✓ **{current_title}** {saved_label}\n\n"
         f"━━━ **{filled_count + 1} / {total}** ━━━\n\n"
         f"**[{next_title}]**\n\n"
         f"{next_question}"
         f"{examples_block}"
+        f"{ontology_hints_block}"
     )
     messages.append(AIMessage(content=response))
 

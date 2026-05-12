@@ -79,29 +79,10 @@ async def legal_checker_node(
         except Exception as exc:
             logger.debug("get_penalty_chain 생략: %s", exc)
 
-    # SWRL Rule 2 — 위계 전이성: 조례가 속하는 위계 체계 전체 파악
-    hierarchy_chain: list[dict] = []
-    if db and keywords:
-        try:
-            hierarchy_chain = db.get_hierarchy_chain(keywords=keywords)
-        except Exception as exc:
-            logger.debug("get_hierarchy_chain 생략: %s", exc)
-
-    # SWRL Rule 3 — 충돌 연쇄: 상위법·조례가 동일 법률 용어를 동시 제한할 때 충돌 가능성
-    conflict_chain: list[dict] = []
-    if db and keywords:
-        try:
-            conflict_chain = db.get_conflict_chain(keywords=keywords)
-        except Exception as exc:
-            logger.debug("get_conflict_chain 생략: %s", exc)
-
-    # SWRL Rule 4 — 벌칙 범위 확장: 2단계 벌칙 체인으로 간접 제재 범위 파악
-    penalty_extension: list[dict] = []
-    if db and keywords:
-        try:
-            penalty_extension = db.get_penalty_extension(keywords=keywords)
-        except Exception as exc:
-            logger.debug("get_penalty_extension 생략: %s", exc)
+    # SWRL Rules 2-4: graph_retriever에서 사전 계산 후 State에 저장된 값을 읽음 (DB 재쿼리 없음)
+    hierarchy_chain: list[dict] = state.get("hierarchy_chain") or []
+    conflict_chain: list[dict] = state.get("conflict_chain") or []
+    penalty_extension: list[dict] = state.get("penalty_extension") or []
 
     logger.debug(
         "[legal_checker] draft_len=%d | legal_basis=%d건 | superior=%d건 | penalty=%d건"

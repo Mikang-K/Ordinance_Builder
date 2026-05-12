@@ -1,10 +1,9 @@
 # 조례 빌더 AI (Ordinance Builder AI)
 
-> 대화형 AI를 통해 지자체별 특수성을 반영하고, 상위법령을 준수하는 **지방 조례 초안**을 단계별로 생성·검토하는 풀스택 AI 서비스
+> AI를 통해 지자체별 특수성을 반영하고, 상위법령을 준수하는 **지방 조례 초안**을 단계별로 생성·검토하는 풀스택 AI 서비스
 
 ## 프로젝트 소개
 
-- **대화형 인터뷰**: 사용자가 자연어로 아이디어를 입력하면 AI가 필수 정보를 단계적으로 수집
 - **그래프 기반 법령 검색**: Neo4j Graph DB에서 관련 상위법·유사 조례를 의미적으로 탐색
 - **법적 초안 자동 생성**: 수집된 정보와 법령 근거를 바탕으로 완전한 조례 조문 출력
 - **실시간 법률 검증**: 생성된 초안을 상위법 조항과 대조하여 충돌 위험 고지
@@ -19,108 +18,6 @@
 | **사용자 편의성** | 단계별 인터뷰 루프, 조항별 "기본값" 자동 생성 옵션 |
 | **데이터 기반** | 전국 지자체 조례 SIMILAR_TO 관계망, 벡터 유사도 검색 |
 | **확장성** | GraphDBInterface(ABC) 추상화로 Mock↔Neo4j↔AuraDB 교체 가능 |
-
----
-
-## 핵심 기능
-
-### 1. 대화형 조례 인터뷰
-
-필수 4개 필드(`region`, `purpose`, `target_group`, `support_type`)가 모두 확보될 때까지 자연어로 반복 질문합니다. Gemini가 사용자 입력에서 정보를 자동 추출하므로, 구조화된 폼 없이 자유로운 대화가 가능합니다.
-
-### 2. 조항별 세부 인터뷰
-
-9개 조문 템플릿(목적·정의·지원대상·지원내용·지원금액·신청방법·심사선정·환수제재·위임)에 대해 개별적으로 세부 내용을 수집합니다. 각 조항마다 "기본값"을 입력하면 AI가 유사 조례를 참고해 자동 생성합니다.
-
-### 3. 그래프 DB 기반 법령 검색
-
-```
-Graph DB 탐색 경로 (우선순위 순):
-1. DELEGATES 경로: 상위법이 명시적으로 위임한 조례 영역
-2. BASED_ON 경로: 해당 영역 기존 조례의 법령 근거
-3. 키워드 폴백 + 벡터 유사도 검색 (Gemini Embedding 3072차원)
-```
-
-Neo4j의 관계 그래프를 순회해 법령 근거와 타 지자체 유사 조례를 함께 제공합니다.
-
-### 4. 법적 조문 초안 생성
-
-Gemini 2.5 Pro가 수집된 정보와 법령 근거를 바탕으로 제1조~최종조까지 완전한 조례문을 생성합니다. 구조화 출력(`OrdinanceDraft` Pydantic 모델)으로 파싱 오류 없이 안정적으로 처리됩니다.
-
-### 5. AI 자체 검토 및 사용자 편집
-
-생성된 초안을 AI가 스스로 검토합니다. 사용자는 편집 모달에서 직접 수정 후 재검증을 요청할 수 있으며, `draft_review_decision`(confirm/revise)으로 워크플로우가 분기됩니다.
-
-### 6. 상위법 정합성 검증
-
-```json
-{
-  "severity": "HIGH",
-  "related_statute": "보조금 관리에 관한 법률 제22조",
-  "description": "보조금 지급 상한선 미설정 시 법 위반 가능",
-  "suggestion": "제5조에 연간 지급 한도 명시 필요"
-}
-```
-
-HIGH·MEDIUM·LOW 3단계 심각도로 분류하여 사용자에게 위험 요소를 고지합니다.
-
----
-
-## 시스템 아키텍처
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    React + TypeScript (Vite)                    │
-│              Chat UI / DraftModal / LegalIssuesPanel            │
-│                      http://localhost:3000                      │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ REST API (JSON)
-┌──────────────────────────▼──────────────────────────────────────┐
-│                   FastAPI Backend  :8000                        │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                  LangGraph Workflow                      │   │
-│  │                                                          │   │
-│  │  START ──[route_at_start]─────────────────────────────► │   │
-│  │          │                                               │   │
-│  │          ├─[legal_review_requested]─► legal_checker      │   │
-│  │          ├─[draft_review]──────────► draft_reviewer      │   │
-│  │          ├─[article_interviewing/article_complete]─► article_interviewer │   │
-│  │          └─[otherwise]─────────────► intent_analyzer     │   │
-│  │                                           │              │   │
-│  │                              [누락 필드?]─┤              │   │
-│  │                         yes ◄─────────────┤              │   │
-│  │                          │          [정보 완비]          │   │
-│  │                    interviewer            │              │   │
-│  │                          │         graph_retriever       │   │
-│  │                         END               │              │   │
-│  │                               [article_queue?]           │   │
-│  │                          yes ◄────────────┤              │   │
-│  │                          │           no ◄─┤              │   │
-│  │                   article_planner   drafting_agent        │   │
-│  │                          │               │              │   │
-│  │                   article_interviewer    END             │   │
-│  │                [조항 완료?]─yes─► drafting_agent         │   │
-│  │                                                          │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  MemorySaver (thread_id = session_id)                          │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ Bolt (7687)
-┌──────────────────────────▼──────────────────────────────────────┐
-│              Neo4j Graph DB  :7474 / :7687                      │
-│  Vector Index: idx_provision_embedding (3072d, cosine)          │
-│  Vector Index: idx_ordinance_embedding  (3072d, cosine)         │
-│  노드: Statute / Provision / Ordinance / LegalTerm              │
-└─────────────────────────────────────────────────────────────────┘
-                           ▲
-          ┌────────────────┘
-          │  pipeline/ (독립 모듈)
-┌─────────┴───────────────────────────────────────────────────────┐
-│         국가법령정보센터 Open API  →  ETL Pipeline               │
-│   LawApiClient → SchemaMapper → Neo4jLoader                     │
-│   initial_load.py (4단계) / incremental_update.py (증분)        │
-└─────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
@@ -1576,6 +1473,37 @@ python -m pipeline.scripts.migrate_relations            # 실제 MERGE
 - `save_qa_history`는 전체 배열을 덮어쓰는 방식 — append는 caller가 담당
 - 저장 실패는 warning 로그만 남기고 QA 응답은 정상 반환 (graceful degradation)
 - 기존 테이블에는 `_MIGRATE_SQL`로 자동 컬럼 추가 (`init_db` 시 실행)
+
+---
+
+### 32. 온톨로지 전체 워크플로우 통합 (2026-05-12)
+
+**기능**: OWL 온톨로지 + SWRL 추론 결과를 기존 3개 노드(drafting_agent, legal_checker, draft_reviewer)에서 전체 8개 노드로 확장.
+
+**변경 요약**:
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `app/core/ontology_context.py` | 신규: `OntologyContext` 클래스 + `SWRLContext` 데이터클래스. `precompute_swrl()` (Rules 2-4 병렬 쿼리) + `get_article_hints()` (LegalTerm 힌트) |
+| `app/graph/state.py` | `hierarchy_chain`, `conflict_chain`, `penalty_extension` 3개 필드 추가 (SWRL 사전 계산 결과 저장) |
+| `app/prompts/legal_terms.py` | `_build_class_hierarchy_section()` + `ONTOLOGY_CLASS_GUIDE` 상수 추가. 자치법규 하위 클래스(조례 유형) OWL 파싱 |
+| `app/prompts/intent_analyzer.py` | `ONTOLOGY_CLASS_GUIDE` import → `INTENT_ANALYZER_SYSTEM` f-string에 주입 |
+| `app/graph/nodes/graph_retriever.py` | `async def`로 전환 / `ontology_ctx` 파라미터 추가 / `precompute_swrl()` await 후 State에 SWRL 결과 저장 |
+| `app/graph/nodes/article_interviewer.py` | `async def`로 전환 / `ontology_ctx` 파라미터 추가 / `ARTICLE_ONTOLOGY_KEYWORDS` 23개 매핑 / `get_article_hints()` 호출 |
+| `app/graph/nodes/legal_checker.py` | SWRL Rules 2-4 DB 직접 쿼리 제거 → `state.get("hierarchy_chain") or []` 패턴으로 State 읽기 |
+| `app/graph/nodes/draft_reviewer.py` | `hierarchy_chain`, `conflict_chain` State 읽기 추가 / `build_draft_revision_human` 호출 시 SWRL 파라미터 전달 |
+| `app/prompts/draft_reviewer.py` | `build_draft_revision_human` 시그니처에 `hierarchy_chain`, `conflict_chain` 파라미터 추가 (기본값 None — 하위 호환) |
+| `app/graph/workflow.py` | `OntologyContext` import 및 싱글톤 생성 / `graph_retriever`, `article_interviewer` partial에 `ontology_ctx` 주입 |
+
+**아키텍처 원칙**:
+- SWRL Rules 2-4는 `graph_retriever`에서 한 번만 계산 → State에 저장 → 하위 노드는 State 읽기 (중복 DB 쿼리 제거)
+- `article_interviewer`와 `graph_retriever`는 이전에 동기 함수였으나, `async def` + `await`로 전환 (LangGraph는 sync/async 노드 모두 지원)
+- 모든 온톨로지 호출은 `try/except`로 감싸져 있어 DB 미응답 시 graceful degradation (빈 결과 반환, 워크플로우 계속)
+
+**체크리스트**:
+- 새 조항 유형 추가 시 `ARTICLE_ONTOLOGY_KEYWORDS`에 해당 키 추가
+- 새 SWRL 규칙 추가 시: OWL 파일 + `neo4j_db.py` Cypher + `base.py` 추상 메서드 + `mock_db.py` stub + `OntologyContext.precompute_swrl()` 병렬 호출에 포함
+- `graph_retriever_node`가 async로 전환됨 — `workflow.py` partial 패턴 그대로 사용 가능
 
 ---
 

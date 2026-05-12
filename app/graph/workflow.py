@@ -5,6 +5,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.core.config import settings
 from app.core.llm import get_llm
+from app.core.ontology_context import OntologyContext
 from app.db.neo4j_db import Neo4jGraphDB
 from app.graph.edges.conditions import (
     route_after_intent_analysis,
@@ -80,14 +81,17 @@ def create_workflow(checkpointer: AsyncPostgresSaver):
     db = Neo4jGraphDB(settings.NEO4J_URI, settings.NEO4J_USER, settings.NEO4J_PASSWORD)
     _db_instance = db
 
+    # OntologyContext 싱글톤 생성 (db와 함께 한 번만)
+    ontology_ctx = OntologyContext(db=db)
+
     builder: StateGraph = StateGraph(OrdinanceBuilderState)
 
     # Register nodes (inject dependencies via partial)
     builder.add_node("intent_analyzer", partial(intent_analyzer_node, llm=intent_llm))
     builder.add_node("interviewer", interviewer_node)
     builder.add_node("article_planner", article_planner_node)
-    builder.add_node("article_interviewer", article_interviewer_node)
-    builder.add_node("graph_retriever", partial(graph_retriever_node, db=db))
+    builder.add_node("article_interviewer", partial(article_interviewer_node, ontology_ctx=ontology_ctx))
+    builder.add_node("graph_retriever", partial(graph_retriever_node, db=db, ontology_ctx=ontology_ctx))
     builder.add_node("drafting_agent", partial(drafting_agent_node, llm=drafting_llm))
     builder.add_node("draft_reviewer", partial(draft_reviewer_node, llm=reviewer_llm))
     builder.add_node("legal_checker", partial(legal_checker_node, llm=legal_llm, db=db))

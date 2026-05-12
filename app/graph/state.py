@@ -71,6 +71,12 @@ class OrdinanceBuilderState(TypedDict):
     # Each item: {term_name, definition, source_statute}
     legal_terms: list[dict]
 
+    # --- SWRL 사전 계산 결과 (graph_retriever에서 저장, 하위 노드에서 읽기) ---
+    # LangGraph TypedDict는 누락 필드를 None으로 채우므로 기존 체크포인트 호환
+    hierarchy_chain: list[dict]      # SWRL Rule 2 — 위계 전이성 체인
+    conflict_chain: list[dict]       # SWRL Rule 3 — 충돌 연쇄
+    penalty_extension: list[dict]    # SWRL Rule 4 — 벌칙 범위 확장
+
     # --- Draft output ---
     draft_articles: list[dict]   # [{"article_no": str, "title": str, "content": str}]
     draft_full_text: str         # Complete ordinance text

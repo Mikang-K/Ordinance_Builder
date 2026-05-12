@@ -1,14 +1,16 @@
 import logging
 
+from app.core.ontology_context import OntologyContext, SWRLContext
 from app.db.base import GraphDBInterface
 from app.graph.state import OrdinanceBuilderState
 
 logger = logging.getLogger(__name__)
 
 
-def graph_retriever_node(
+async def graph_retriever_node(
     state: OrdinanceBuilderState,
     db: GraphDBInterface,
+    ontology_ctx: OntologyContext | None = None,
 ) -> dict:
     """
     Node 3 – Graph Retriever  (no LLM call – DB query only)
@@ -17,9 +19,11 @@ def graph_retriever_node(
     1. Relevant statute provisions (legal basis for the ordinance)
     2. Similar ordinances from other regions
     3. Provision content from those similar ordinances (for article interview examples)
+    4. SWRL Rules 2-4 precomputed via OntologyContext (stored in State for downstream nodes)
 
     Input  State: ordinance_info
-    Output State: legal_basis, similar_ordinances, article_examples, current_stage
+    Output State: legal_basis, similar_ordinances, article_examples, current_stage,
+                  hierarchy_chain, conflict_chain, penalty_extension
     """
     info: dict = state.get("ordinance_info") or {}
 
@@ -89,10 +93,26 @@ def graph_retriever_node(
     except Exception as e:
         logger.warning("Graph DB 검색 실패 — 빈 결과로 계속 진행: %s", e)
 
+    # SWRL Rules 2-4 사전 계산 (OntologyContext 주입 시)
+    swrl = SWRLContext()
+    if ontology_ctx and keywords:
+        try:
+            swrl = await ontology_ctx.precompute_swrl(keywords=keywords)
+        except Exception as swrl_exc:
+            logger.debug("SWRL 사전 계산 생략: %s", swrl_exc)
+
+    logger.debug(
+        "[graph_retriever] hierarchy=%d건 conflict=%d건 penalty_ext=%d건",
+        len(swrl.hierarchy_chain), len(swrl.conflict_chain), len(swrl.penalty_extension),
+    )
+
     return {
         "legal_basis": legal_basis,
         "similar_ordinances": similar_ordinances,
         "article_examples": article_examples,
         "legal_terms": legal_terms,
         "current_stage": "retrieving",
+        "hierarchy_chain": swrl.hierarchy_chain,
+        "conflict_chain": swrl.conflict_chain,
+        "penalty_extension": swrl.penalty_extension,
     }

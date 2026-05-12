@@ -7,7 +7,7 @@ ONTOLOGY_TERM_GUIDE가 자동 갱신됩니다.
 
 from pathlib import Path
 
-from rdflib import Graph, OWL, RDFS, RDF
+from rdflib import Graph, OWL, RDFS, RDF, URIRef
 
 _NS = "http://www.semanticweb.org/user/ontologies/2026/2/untitled-ontology-3#"
 
@@ -81,3 +81,46 @@ ONTOLOGY_TERM_GUIDE = f"""
 
 {_rdf_section}
 """.strip()
+
+
+def _build_class_hierarchy_section(g: Graph) -> str:
+    """
+    OWL 자치법규의 하위 클래스 목록을 추출해 intent_analyzer용 분류 가이드 반환.
+
+    조례(지원/설치·운영/관리·규제/복지·서비스) 하위 유형이
+    intent_analyzer 시스템 프롬프트에 OWL 정의 기반으로 주입됨.
+    """
+    lines = []
+    try:
+        자치법규_uri = URIRef(_NS + "자치법규")
+        for cls in sorted(g.subjects(RDFS.subClassOf, 자치법규_uri)):
+            name = _local(cls)
+            label_ko = next(
+                (str(lb) for lb in g.objects(cls, RDFS.label) if getattr(lb, "language", None) == "ko"),
+                name,
+            )
+            comment = next(g.objects(cls, RDFS.comment), None)
+            entry = f"  - {label_ko}"
+            if comment:
+                entry += f": {str(comment)[:80]}"
+            lines.append(entry)
+    except Exception:
+        pass
+    if not lines:
+        lines = [
+            "  - 지원: 보조금·지원금·현물 지원 목적",
+            "  - 설치·운영: 위원회·센터 설치 및 운영",
+            "  - 관리·규제: 시설 관리·사용 허가·과태료·규제",
+            "  - 복지·서비스: 돌봄·복지서비스·급여·방문서비스",
+        ]
+    return "[조례 하위 유형 (OWL 자치법규 클래스 계층)]\n" + "\n".join(lines)
+
+
+try:
+    _class_section = _build_class_hierarchy_section(
+        Graph().parse(str(_RDF_PATH), format="xml") if _RDF_PATH.exists() else Graph()
+    )
+except Exception:
+    _class_section = _build_class_hierarchy_section(Graph())
+
+ONTOLOGY_CLASS_GUIDE: str = _class_section

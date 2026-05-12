@@ -60,13 +60,42 @@ def build_draft_revision_human(
     user_request: str,
     draft_full_text: str,
     draft_articles: list[dict],
+    hierarchy_chain: list[dict] | None = None,
+    conflict_chain: list[dict] | None = None,
 ) -> str:
     articles_text = "\n\n".join(
         f"{a['article_no']} {a['title']}\n{a['content']}"
         for a in draft_articles
     )
+
+    # SWRL Rule 2 — 위계 체계 섹션
+    hierarchy_section = ""
+    if hierarchy_chain:
+        lines = [
+            f"  [depth={h['depth']}] {h['statute_title']} ({h.get('statute_category', '')}) "
+            f"→ {h['ordinance_title']}"
+            for h in hierarchy_chain[:5]
+        ]
+        hierarchy_section = "\n\n## 수정 시 준수해야 할 법적 위계 체계\n" + "\n".join(lines)
+
+    # SWRL Rule 3 — 충돌 위험 섹션
+    conflict_section = ""
+    if conflict_chain:
+        lines = [
+            f"  [{c['conflict_term']}] 상위법 {c['statute_article']} ↔ 조례 {c['ordinance_article']}"
+            for c in conflict_chain[:5]
+        ]
+        conflict_section = "\n\n## 충돌 위험 용어 (수정 시 주의)\n" + "\n".join(lines)
+
+    suffix = (
+        "\n\n위 수정 사항을 반영하되, 법적 위계 체계를 준수하고 충돌 위험 용어에 주의하세요."
+        if (hierarchy_section or conflict_section)
+        else "\n\n위 수정 사항을 반영한 새 초안을 작성하세요."
+    )
+
     return (
         f"## 현재 조례 초안\n{articles_text}\n\n"
-        f"## 사용자 수정 요청\n{user_request}\n\n"
-        f"위 수정 사항을 반영한 새 초안을 작성하세요."
+        f"## 사용자 수정 요청\n{user_request}"
+        f"{hierarchy_section}{conflict_section}"
+        f"{suffix}"
     )
