@@ -623,19 +623,56 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
 @media (max-width: 767px) {
   /* Header: row 1 = title + actions, row 2 = stage indicator */
   .app-header {
-    padding: 10px 14px;
+    padding: 10px 12px;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 4px;
-    row-gap: 6px;
+    align-items: flex-start;
+    gap: 8px;
+    row-gap: 8px;
   }
   .app-subtitle { display: none; }
-  .header-left { flex: 1; min-width: 0; }
-  .header-actions { flex-shrink: 0; }
+  .app-title {
+    font-size: 1.08em;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .header-left {
+    order: 1;
+    flex: 1 1 100%;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .font-size-slider { display: none !important; }
+  .ordinance-type-badge {
+    order: 2;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .header-actions {
+    order: 3;
+    width: 100%;
+    min-width: 0;
+    flex-shrink: 1;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .header-actions::-webkit-scrollbar { display: none; }
+  .app-user-info { display: none !important; }
+  .header-primary-action,
+  .header-help-action,
+  .header-actions .reset-btn,
+  .header-actions .open-draft-btn {
+    min-height: 40px;
+    padding: 8px 12px !important;
+    font-size: 0.8rem !important;
+  }
 
   /* Stage indicator: full-width second row */
   .stage-indicator {
-    order: 10;
+    order: 4;
     width: 100%;
     flex: none;
     justify-content: space-between;
@@ -648,7 +685,49 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   .stage-step { gap: 0; }
 
   /* Main: stack vertically */
-  .app-main { flex-direction: column; }
+  .app-main {
+    flex-direction: column;
+    min-height: 0;
+  }
+  .qa-main-area,
+  .qa-panel {
+    min-height: 0;
+  }
+  .qa-panel-header {
+    padding: 10px 12px !important;
+    gap: 8px;
+    align-items: flex-start !important;
+  }
+  .qa-panel-header > span {
+    display: none;
+  }
+  .qa-message-list {
+    padding: 12px !important;
+    gap: 12px !important;
+  }
+  .qa-message-bubble,
+  .qa-source-list {
+    max-width: 100% !important;
+  }
+  .qa-input-area {
+    padding: 10px 12px !important;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+    gap: 8px !important;
+  }
+  .qa-input {
+    min-height: 44px;
+    max-height: 120px;
+    font-size: 16px !important;
+  }
+  .qa-send-btn,
+  .qa-apply-btn {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+  .qa-send-btn {
+    min-width: 64px;
+    padding: 10px 14px !important;
+  }
 
   /* Mobile tabs */
   .mobile-tabs {
@@ -709,7 +788,41 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   .chat-window { padding: 14px 12px; gap: 12px; }
 
   /* Draft modal: full width on mobile */
-  .draft-modal { width: 100vw; }
+  .draft-modal-backdrop {
+    align-items: stretch !important;
+    justify-content: center !important;
+  }
+  .draft-modal {
+    width: 100vw !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    border-radius: 0 !important;
+  }
+  .draft-modal-header {
+    padding: 12px 14px !important;
+    min-height: 56px;
+  }
+  .draft-modal-title {
+    min-width: 0;
+  }
+  .draft-modal-title h2 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .draft-modal-hint {
+    padding: 8px 14px;
+  }
+  .draft-modal-textarea {
+    padding: 14px;
+    font-size: 16px;
+  }
+  .draft-modal-issues {
+    max-height: 32dvh;
+  }
+  .completed-draft-body {
+    padding: 16px 14px;
+  }
 
   /* Draft modal footer: wrap buttons on small screens */
   .draft-modal-footer {
@@ -722,6 +835,147 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
     flex: 1;
     min-width: 0;
     text-align: center;
+  }
+
+  /* Article setup modal */
+  .article-items-modal {
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+  }
+  .article-items-header {
+    height: auto !important;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .article-items-header .draft-modal-title {
+    align-items: flex-start;
+  }
+  .article-items-header-actions {
+    width: 100%;
+    justify-content: flex-end;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+  .article-items-layout {
+    flex-direction: column !important;
+    min-height: 0;
+  }
+  .article-items-sidebar {
+    width: 100% !important;
+    max-height: 34dvh;
+    border-right: none !important;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .article-items-sidebar-scroll {
+    padding: 12px !important;
+  }
+  .article-items-sidebar-scroll ul {
+    flex-direction: row !important;
+    overflow-x: auto;
+    gap: 8px !important;
+    padding-bottom: 2px !important;
+  }
+  .article-items-sidebar-scroll li {
+    flex: 0 0 auto;
+    max-width: 180px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .article-items-guide {
+    max-height: 120px !important;
+    padding: 12px !important;
+  }
+  .article-items-content {
+    min-height: 0;
+  }
+  .article-items-container {
+    padding: 16px 14px !important;
+  }
+  .article-items-form-heading {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 12px;
+  }
+  .article-items-secondary-action,
+  .article-items-default-badge {
+    width: 100%;
+    text-align: center;
+  }
+  .article-items-default-card {
+    padding: 20px 14px !important;
+    font-size: 0.95rem !important;
+  }
+  .structured-input-panel {
+    padding: 12px !important;
+  }
+  .option-chip,
+  .suggestion-chip {
+    min-height: 40px;
+    white-space: normal;
+    text-align: left;
+  }
+  .article-definition-row {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .article-definition-term,
+  .article-definition-desc {
+    width: 100% !important;
+    flex: none !important;
+    font-size: 16px !important;
+  }
+  .article-items-textarea {
+    min-height: 260px !important;
+    height: auto !important;
+    font-size: 16px !important;
+  }
+  .article-items-footer {
+    position: sticky;
+    bottom: 0;
+    padding: 10px 12px !important;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .article-items-footer button {
+    min-height: 44px;
+  }
+
+  /* Onboarding and tutorial */
+  .onboarding-card {
+    max-width: none !important;
+    border-radius: 12px !important;
+  }
+  .onboarding-body {
+    padding: 24px 18px 20px !important;
+  }
+  .onboarding-type-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .onboarding-chip-list {
+    max-height: 34dvh;
+    overflow-y: auto;
+  }
+  .onboarding-footer {
+    padding: 12px 18px 18px !important;
+    gap: 8px !important;
+  }
+  .onboarding-footer > button {
+    min-height: 44px;
+    padding: 10px 14px !important;
+  }
+  .tutorial-card {
+    left: 12px !important;
+    right: 12px !important;
+    top: auto !important;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+    transform: none !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+  .tutorial-card-arrow-top::before {
+    display: none;
   }
 }
 
@@ -1065,6 +1319,39 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   .session-card-actions { width: 100%; }
   .session-resume-btn { flex: 1; text-align: center; }
   .session-delete-btn { flex-shrink: 0; }
+}
+
+@media (max-width: 767px) {
+  .session-list-hero {
+    padding: 72px 18px 32px;
+    text-align: center;
+  }
+  .session-list-user {
+    top: 14px;
+    left: 14px;
+    right: 14px;
+    justify-content: flex-end;
+  }
+  .session-list-username {
+    max-width: 42vw;
+  }
+  .session-list-body {
+    padding: 24px 14px;
+  }
+  .session-card {
+    padding: 14px;
+    border-radius: 10px;
+  }
+  .session-card-meta {
+    flex-wrap: wrap;
+  }
+  .new-session-btn,
+  .session-list-logout-btn,
+  .session-resume-btn,
+  .session-delete-btn {
+    min-height: 40px;
+    touch-action: manipulation;
+  }
 }
 
 /* ── 채팅 선택지 칩 ──────────────────────────────────────── */

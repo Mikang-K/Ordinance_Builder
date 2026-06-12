@@ -419,7 +419,7 @@ export default function App() {
         </div>
         <StageIndicator stage={stage} />
         {ordinanceType && (
-          <span style={{
+          <span className="ordinance-type-badge" style={{
             padding: '3px 10px',
             background: 'rgba(255,255,255,0.15)',
             border: '1px solid rgba(255,255,255,0.3)',
@@ -449,6 +449,7 @@ export default function App() {
             </button>
           )}
           <button
+            className="header-primary-action"
             id="btn-new-session-header"
             onClick={() => {
               if (hasSession && window.confirm('현재 진행 중인 조례 작업이 있습니다. 새로 시작하시겠습니까?')) {
@@ -461,6 +462,7 @@ export default function App() {
             ✚ 새 조례 만들기
           </button>
           <button
+            className="header-help-action"
             onClick={() => setTutorialStep(getInitialTutorialStep())}
             style={{
               padding: '6px 12px',
@@ -476,7 +478,7 @@ export default function App() {
             ? 도움말
           </button>
           <button className="reset-btn" onClick={handleReset}>목록</button>
-          <div style={userInfoStyle}>
+          <div className="app-user-info" style={userInfoStyle}>
             {user.photoURL && (
               <img src={user.photoURL} alt="프로필" style={avatarStyle} referrerPolicy="no-referrer" />
             )}
@@ -577,15 +579,16 @@ const loginPageStyle: React.CSSProperties = {
   justifyContent: 'center',
   minHeight: '100vh',
   background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
+  padding: '20px',
 }
 
 const loginCardStyle: React.CSSProperties = {
   background: '#ffffff',
   borderRadius: '16px',
-  padding: '48px 40px',
+  padding: 'clamp(28px, 8vw, 48px) clamp(20px, 7vw, 40px)',
   textAlign: 'center',
   boxShadow: '0 20px 60px rgba(0, 0, 0, 0.2)',
-  minWidth: '320px',
+  width: 'min(100%, 420px)',
 }
 
 const googleBtnStyle: React.CSSProperties = {

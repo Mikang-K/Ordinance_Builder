@@ -221,7 +221,7 @@ export default function ArticleItemsModal({
       style={{ justifyContent: 'center', alignItems: 'center' }}
     >
       <div 
-        className="draft-modal" 
+        className="draft-modal article-items-modal" 
         style={{ 
           maxWidth: '1200px', 
           width: '95vw', 
@@ -233,7 +233,7 @@ export default function ArticleItemsModal({
           boxShadow: '0 8px 32px rgba(0,0,0,0.18)'
         }}
       >
-        <div className="draft-modal-header" style={{ padding: '16px 24px', height: '70px', boxSizing: 'border-box', flexShrink: 0 }}>
+        <div className="draft-modal-header article-items-header" style={{ padding: '16px 24px', height: '70px', boxSizing: 'border-box', flexShrink: 0 }}>
           <div className="draft-modal-title">
             <span className="draft-modal-icon">📋</span>
             <h2>조례 상세 조항 설정</h2>
@@ -241,7 +241,7 @@ export default function ArticleItemsModal({
               ( {currentIndex + 1} / {articles.length} )
             </span>
           </div>
-          <div className="header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div className="header-actions article-items-header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {onOpenQA && (
               <button
                 onClick={onOpenQA}
@@ -279,10 +279,10 @@ export default function ArticleItemsModal({
           </div>
         </div>
 
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div className="article-items-layout" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Left Panel: Sidebar */}
-          <div style={{ width: '320px', background: '#f8fafc', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '20px 16px', flex: 1, overflowY: 'auto' }}>
+          <div className="article-items-sidebar" style={{ width: '320px', background: '#f8fafc', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+            <div className="article-items-sidebar-scroll" style={{ padding: '20px 16px', flex: 1, overflowY: 'auto' }}>
               <h3 style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>진행 목차</h3>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {articles.map((k, idx) => {
@@ -336,7 +336,7 @@ export default function ArticleItemsModal({
 
             {/* Guide Panel */}
             {guide && (
-              <div style={{ padding: '20px 16px', background: '#fffbeb', borderTop: '1px solid #fde68a', overflowY: 'auto', maxHeight: '280px' }}>
+              <div className="article-items-guide" style={{ padding: '20px 16px', background: '#fffbeb', borderTop: '1px solid #fde68a', overflowY: 'auto', maxHeight: '280px' }}>
                 <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#b45309', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span>💡</span> 작성 가이드
                 </h4>
@@ -353,10 +353,10 @@ export default function ArticleItemsModal({
           </div>
 
           {/* Right Panel: Content Form */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
+          <div className="article-items-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
             <div className="article-items-container" style={{ padding: '24px 32px', flex: 1, overflowY: 'auto' }}>
               
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div className="article-items-form-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div>
                   <h3 style={{ fontWeight: '700', color: '#1e293b', fontSize: '1.3rem', marginBottom: '4px' }}>
                     {guide?.title || currentKey}
@@ -370,13 +370,14 @@ export default function ArticleItemsModal({
                 {!isDefault ? (
                   <button
                     onClick={() => handleSetDefault(currentKey)}
+                    className="article-items-secondary-action"
                     style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px 14px', fontSize: '0.85rem', cursor: 'pointer', color: '#475569', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
                     disabled={isLoading}
                   >
                     초기화 및 기본값(AI) 사용
                   </button>
                 ) : (
-                  <span style={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: '600', background: '#dbeafe', padding: '6px 14px', borderRadius: '6px' }}>
+                  <span className="article-items-default-badge" style={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: '600', background: '#dbeafe', padding: '6px 14px', borderRadius: '6px' }}>
                     ✨ AI 기본값 적용됨
                   </span>
                 )}
@@ -384,6 +385,7 @@ export default function ArticleItemsModal({
 
               {isDefault ? (
                 <div 
+                  className="article-items-default-card"
                   style={{ padding: '30px 20px', color: '#64748b', fontSize: '1.05rem', background: '#f8fafc', borderRadius: '8px', cursor: 'pointer', textAlign: 'center', border: '2px dashed #cbd5e1', transition: 'all 0.2s' }} 
                   onClick={() => handleChange(currentKey, '')}
                 >
@@ -426,14 +428,15 @@ export default function ArticleItemsModal({
                     </div>
                   )}
                   {currentKey === '정의' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div className="article-definition-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {definitions.map((def, idx) => (
-                    <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                    <div key={idx} className="article-definition-row" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                       <input
                         type="text"
                         placeholder="용어 (예: 청년)"
                         value={def.term}
                         onChange={(e) => handleDefinitionChange(idx, 'term', e.target.value)}
+                        className="article-definition-term"
                         style={{ padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', width: '30%', fontSize: '0.95rem' }}
                         disabled={isLoading}
                       />
@@ -442,6 +445,7 @@ export default function ArticleItemsModal({
                         placeholder="설명 (예: 만 19세 이상 39세 이하인 사람을 말한다.)"
                         value={def.desc}
                         onChange={(e) => handleDefinitionChange(idx, 'desc', e.target.value)}
+                        className="article-definition-desc"
                         style={{ padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', flex: 1, fontSize: '0.95rem' }}
                         disabled={isLoading}
                       />
@@ -465,6 +469,7 @@ export default function ArticleItemsModal({
                 </div>
               ) : (
                 <textarea
+                  className="article-items-textarea"
                   value={val || ''}
                   onChange={(e) => handleChange(currentKey, e.target.value)}
                   style={{ width: '100%', height: 'calc(100% - 80px)', minHeight: '200px', padding: '16px', border: '1px solid #cbd5e1', borderRadius: '6px', resize: 'none', fontSize: '1rem', lineHeight: '1.6', fontFamily: 'inherit' }}
@@ -477,7 +482,7 @@ export default function ArticleItemsModal({
             </div>
 
             {/* Footer buttons */}
-            <div className="draft-modal-footer" style={{ padding: '16px 32px', display: 'flex', gap: '12px', justifyContent: 'space-between', background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+            <div className="draft-modal-footer article-items-footer" style={{ padding: '16px 32px', display: 'flex', gap: '12px', justifyContent: 'space-between', background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
               <button
                 onClick={handlePrev}
                 disabled={isLoading || currentIndex === 0}

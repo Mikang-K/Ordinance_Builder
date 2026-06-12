@@ -142,8 +142,8 @@ function QAMessageBubble({
     && msg.applicable_article_key === currentArticleKey
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
-      <div style={{
+    <div className="qa-message-row" style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
+      <div className="qa-message-bubble" style={{
         maxWidth: '88%',
         padding: '10px 13px',
         borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
@@ -158,7 +158,7 @@ function QAMessageBubble({
       </div>
 
       {!isUser && msg.sources && msg.sources.length > 0 && (
-        <div style={{ maxWidth: '88%', width: '100%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div className="qa-source-list" style={{ maxWidth: '88%', width: '100%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <span style={{ fontSize: '0.72rem', color: '#94a3b8', paddingLeft: '2px' }}>📋 법령 근거</span>
           {msg.sources.map((s, i) => <SourceItem key={i} source={s} />)}
         </div>
@@ -167,6 +167,7 @@ function QAMessageBubble({
       {canApply && msg.applicable_content && (
         <button
           onClick={() => onApply(msg.applicable_content!)}
+          className="qa-apply-btn"
           style={{
             alignSelf: 'flex-start',
             padding: '6px 14px',
@@ -238,7 +239,7 @@ export default function QAPanel({
   }
 
   return (
-    <div style={{
+    <div className="qa-panel" style={{
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
@@ -246,7 +247,7 @@ export default function QAPanel({
       fontSize: `${fontSize}px`,
     }}>
       {/* Header */}
-      <div style={{
+      <div className="qa-panel-header" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '14px 18px', borderBottom: '1px solid #e2e8f0',
         background: '#f8fafc', flexShrink: 0,
@@ -259,7 +260,7 @@ export default function QAPanel({
       </div>
 
       {/* Message history */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div className="qa-message-list" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {qaHistory.length === 0 && (
           <div style={{ margin: 'auto', textAlign: 'center', color: '#94a3b8', padding: '32px 16px' }}>
             <p style={{ fontSize: '1.8rem', marginBottom: '12px' }}>⚖️</p>
@@ -292,7 +293,7 @@ export default function QAPanel({
       </div>
 
       {/* Input area */}
-      <div style={{
+      <div className="qa-input-area" style={{
         display: 'flex', gap: '8px', padding: '12px 14px',
         borderTop: '1px solid #e2e8f0', background: 'white', flexShrink: 0,
         alignItems: 'flex-end',
@@ -304,6 +305,7 @@ export default function QAPanel({
           placeholder="법령·조례에 대해 질문하세요... (Shift+Enter 줄바꿈)"
           rows={2}
           disabled={isLoading}
+          className="qa-input"
           style={{
             flex: 1, padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: '8px',
             resize: 'none', fontSize: '0.88rem', fontFamily: 'inherit', outline: 'none',
@@ -313,6 +315,7 @@ export default function QAPanel({
         <button
           onClick={handleSend}
           disabled={!input.trim() || isLoading}
+          className="qa-send-btn"
           style={{
             padding: '9px 16px', background: '#1e40af', color: 'white', border: 'none',
             borderRadius: '8px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600,

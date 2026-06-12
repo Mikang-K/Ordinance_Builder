@@ -296,7 +296,7 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
     }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div style={{
+      <div className="onboarding-card" style={{
         width: '100%',
         maxWidth: '620px',
         background: '#ffffff',
@@ -325,7 +325,7 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
           }} />
         </div>
 
-        <div style={{ padding: '32px 36px 28px' }}>
+        <div className="onboarding-body" style={{ padding: '32px 36px 28px' }}>
           {isTypeScreen ? (
             /* ── Step 0: Ordinance type selection ────────────────────────── */
             <>
@@ -338,7 +338,7 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
               <p style={{ fontSize: '0.88rem', color: '#64748b', margin: '0 0 24px' }}>
                 조례 유형에 따라 최적화된 조문 구조가 자동 선택됩니다.
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="onboarding-type-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 {ORDINANCE_TYPES.map(t => {
                   const selected = selectedType === t.value
                   return (
@@ -383,7 +383,7 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
                 {step.description}
               </p>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
+              <div className="onboarding-chip-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
                 {step.options.map(opt => {
                   const selected = chipValue === opt
                   return (
@@ -442,7 +442,7 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
         </div>
 
         {/* Footer */}
-        <div style={{
+        <div className="onboarding-footer" style={{
           padding: '16px 36px 24px',
           display: 'flex',
           gap: '10px',
