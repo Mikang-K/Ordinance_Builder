@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # CORS — str 타입으로 유지해 pydantic-settings의 JSON 디코딩 우회
     # 쉼표 구분 문자열로 주입: "https://example.com,https://other.com"
     # 파싱은 main.py의 cors_origins() 헬퍼에서 처리
-    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://ordinance-builder-b9f6c.web.app"
 
     class Config:
         env_file = ".env"

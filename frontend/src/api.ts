@@ -8,6 +8,12 @@ import type {
 } from './types'
 import { getIdToken } from './firebase'
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')
+
+function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`
+}
+
 async function authHeaders(): Promise<HeadersInit> {
   const token = await getIdToken()
   return {
@@ -20,7 +26,7 @@ export async function createSession(
   initialMessage: string,
   ordinanceType?: string,
 ): Promise<SessionCreateResponse> {
-  const res = await fetch('/api/v1/session', {
+  const res = await fetch(apiUrl('/api/v1/session'), {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify({
@@ -37,7 +43,7 @@ export async function sendMessage(
   message: string,
   draftText?: string,
 ): Promise<ChatResponse> {
-  const res = await fetch(`/api/v1/session/${sessionId}/chat`, {
+  const res = await fetch(apiUrl(`/api/v1/session/${sessionId}/chat`), {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify({ message, draft_text: draftText ?? null }),
@@ -50,7 +56,7 @@ export async function submitArticlesBatch(
   sessionId: string,
   articles: Record<string, string | null>,
 ): Promise<ChatResponse> {
-  const res = await fetch(`/api/v1/session/${sessionId}/articles_batch`, {
+  const res = await fetch(apiUrl(`/api/v1/session/${sessionId}/articles_batch`), {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify({ articles }),
@@ -63,7 +69,7 @@ export async function finalizeSession(
   sessionId: string,
   draftText: string,
 ): Promise<FinalizeResponse> {
-  const res = await fetch(`/api/v1/session/${sessionId}/finalize`, {
+  const res = await fetch(apiUrl(`/api/v1/session/${sessionId}/finalize`), {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify({ draft_text: draftText }),
@@ -73,7 +79,7 @@ export async function finalizeSession(
 }
 
 export async function listSessions(): Promise<SessionSummary[]> {
-  const res = await fetch('/api/v1/sessions', {
+  const res = await fetch(apiUrl('/api/v1/sessions'), {
     headers: await authHeaders(),
   })
   if (!res.ok) throw new Error(`세션 목록 조회 실패: ${res.status}`)
@@ -81,7 +87,7 @@ export async function listSessions(): Promise<SessionSummary[]> {
 }
 
 export async function getSessionState(sessionId: string): Promise<SessionStateResponse> {
-  const res = await fetch(`/api/v1/session/${sessionId}`, {
+  const res = await fetch(apiUrl(`/api/v1/session/${sessionId}`), {
     headers: await authHeaders(),
   })
   if (!res.ok) throw new Error(`세션 상태 조회 실패: ${res.status}`)
@@ -89,7 +95,7 @@ export async function getSessionState(sessionId: string): Promise<SessionStateRe
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  const res = await fetch(`/api/v1/session/${sessionId}`, {
+  const res = await fetch(apiUrl(`/api/v1/session/${sessionId}`), {
     method: 'DELETE',
     headers: await authHeaders(),
   })
@@ -100,7 +106,7 @@ export async function askQuestion(
   sessionId: string,
   question: string,
 ): Promise<QAResponse> {
-  const res = await fetch(`/api/v1/session/${sessionId}/qa`, {
+  const res = await fetch(apiUrl(`/api/v1/session/${sessionId}/qa`), {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify({ question }),
@@ -113,7 +119,7 @@ export async function searchDirectQuestion(
   question: string,
   context?: { current_article_key?: string | null; ordinance_info?: Record<string, string> | null },
 ): Promise<QAResponse> {
-  const res = await fetch('/api/v1/qa', {
+  const res = await fetch(apiUrl('/api/v1/qa'), {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify({ question, ...context }),
