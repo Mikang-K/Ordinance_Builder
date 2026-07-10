@@ -98,7 +98,12 @@ export default function ArticleItemsModal({
     } else {
       const compiled = definitions
         .filter(d => d.term.trim() || d.desc.trim())
-        .map(d => `- ${d.term.trim()}: ${d.desc.trim()}`)
+        .map(d => {
+          const term = d.term.trim()
+          const desc = d.desc.trim()
+          if (term && desc) return `- ${term}: ${desc}`
+          return `- ${term || desc}`
+        })
         .join('\n')
       setValues((prev) => {
         if (prev['정의'] === null) return prev
@@ -111,7 +116,12 @@ export default function ArticleItemsModal({
   useEffect(() => {
     if (!pendingQAContent) return
     const currentKey = articles[currentIndex]
-    if (!currentKey || currentKey === '정의') {
+    if (!currentKey) {
+      onQAContentApplied?.()
+      return
+    }
+    if (currentKey === '정의') {
+      setDefinitions([{ term: '', desc: pendingQAContent }])
       onQAContentApplied?.()
       return
     }
@@ -222,6 +232,9 @@ export default function ArticleItemsModal({
     >
       <div 
         className="draft-modal article-items-modal" 
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="article-items-title"
         style={{ 
           maxWidth: '1200px', 
           width: '95vw', 
@@ -235,8 +248,8 @@ export default function ArticleItemsModal({
       >
         <div className="draft-modal-header article-items-header" style={{ padding: '16px 24px', height: '70px', boxSizing: 'border-box', flexShrink: 0 }}>
           <div className="draft-modal-title">
-            <span className="draft-modal-icon">📋</span>
-            <h2>조례 상세 조항 설정</h2>
+            <span className="draft-modal-icon" aria-hidden="true">📋</span>
+            <h2 id="article-items-title">조례 상세 조항 설정</h2>
             <span style={{ fontSize: '0.95rem', color: '#64748b', marginLeft: '8px', fontWeight: 600 }}>
               ( {currentIndex + 1} / {articles.length} )
             </span>
@@ -271,6 +284,7 @@ export default function ArticleItemsModal({
                 onChange={(e) => onFontSizeChange(Number(e.target.value))}
                 style={{ width: '120px', accentColor: '#1e40af' }}
                 title="폰트 크기"
+                aria-label="폰트 크기"
               />
             </div>
             <button className="draft-modal-close" onClick={onClose} aria-label="닫기">
@@ -289,22 +303,31 @@ export default function ArticleItemsModal({
                   const isActive = idx === currentIndex
                   const isDone = idx < currentIndex
                   return (
-                    <li 
-                      key={k} 
-                      style={{ 
-                        padding: '8px 12px', 
-                        borderRadius: '6px', 
-                        background: isActive ? '#e0e7ff' : (isDone ? '#f1f5f9' : 'transparent'),
-                        color: isActive ? '#3730a3' : (isDone ? '#94a3b8' : '#64748b'),
-                        fontWeight: isActive ? 700 : 500,
-                        fontSize: '0.9rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}
-                    >
-                      <span style={{ fontSize: '0.75rem', opacity: isActive ? 1 : 0.6 }}>{isDone ? '✓' : idx + 1}</span>
-                      {k}
+                    <li key={k}>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentIndex(idx)}
+                        aria-current={isActive ? 'step' : undefined}
+                        className="article-nav-item"
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: isActive ? '#e0e7ff' : (isDone ? '#f1f5f9' : 'transparent'),
+                          color: isActive ? '#3730a3' : (isDone ? '#475569' : '#64748b'),
+                          fontWeight: isActive ? 700 : 500,
+                          fontSize: '0.9rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                        }}
+                      >
+                        <span style={{ fontSize: '0.75rem', opacity: isActive ? 1 : 0.75 }}>{isDone ? '✓' : idx + 1}</span>
+                        {k}
+                      </button>
                     </li>
                   )
                 })}
@@ -384,20 +407,21 @@ export default function ArticleItemsModal({
               </div>
 
               {isDefault ? (
-                <div 
+                <button
+                  type="button"
                   className="article-items-default-card"
-                  style={{ padding: '30px 20px', color: '#64748b', fontSize: '1.05rem', background: '#f8fafc', borderRadius: '8px', cursor: 'pointer', textAlign: 'center', border: '2px dashed #cbd5e1', transition: 'all 0.2s' }} 
+                  style={{ width: '100%', padding: '30px 20px', color: '#64748b', fontSize: '1.05rem', background: '#f8fafc', borderRadius: '8px', cursor: 'pointer', textAlign: 'center', border: '2px dashed #cbd5e1', transition: 'all 0.2s', fontFamily: 'inherit' }}
                   onClick={() => handleChange(currentKey, '')}
                 >
                   <p style={{ marginBottom: '8px' }}>현재 <strong>기본값(AI 자동 생성)</strong>이 선택되어 있습니다.</p>
-                  <p style={{ fontSize: '0.9rem', color: '#94a3b8' }}>마우스로 클릭하여 ✏️ 직접 내용을 입력할 수 있습니다.</p>
-                </div>
+                  <p style={{ fontSize: '0.9rem', color: '#64748b' }}>클릭하거나 Enter를 눌러 직접 내용을 입력할 수 있습니다.</p>
+                </button>
               ) : (
                 <>
                   {ARTICLE_STRUCTURED_OPTIONS[currentKey] && (
                     <div className="structured-input-panel" style={{ marginBottom: '16px' }}>
                       <p style={{ fontSize: '0.82rem', color: '#475569', marginBottom: '12px', fontWeight: 600 }}>
-                        ✅ 빠른 선택 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(아래 텍스트 입력과 함께 제출됩니다)</span>
+                        ✅ 빠른 선택 <span style={{ fontWeight: 400, color: '#64748b' }}>(아래 텍스트 입력과 함께 제출됩니다)</span>
                       </p>
                       {Object.entries(ARTICLE_STRUCTURED_OPTIONS[currentKey]).map(([field, config]) => {
                         const sels = structuredSelections[currentKey] || {}

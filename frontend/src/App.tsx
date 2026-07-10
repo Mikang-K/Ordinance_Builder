@@ -126,8 +126,6 @@ export default function App() {
     if (tutorialStep >= TUTORIAL_STEP_COUNT - 1) {
       setTutorialStep(-1)
       localStorage.setItem(TUTORIAL_KEY, 'true')
-    } else {
-      setTutorialStep(s => s + 1)
     }
   }
 
@@ -276,6 +274,13 @@ export default function App() {
     setIsOnboardingOpen(true)
   }
 
+  const handleOpenQAFromArticleModal = () => {
+    setHideArticleModal(true)
+    window.setTimeout(() => {
+      document.getElementById('qa-input')?.focus()
+    }, 0)
+  }
+
   const handleSelectSession = async (sessionId: string) => {
     setError(null)
     try {
@@ -414,6 +419,7 @@ export default function App() {
               onChange={(e) => setFontSize(Number(e.target.value))}
               style={{ width: '120px', accentColor: '#ffffff' }}
               title="폰트 크기"
+              aria-label="폰트 크기"
             />
           </div>
         </div>
@@ -432,7 +438,7 @@ export default function App() {
             {ordinanceType} 조례
           </span>
         )}
-        <div className="header-actions">
+        <div className="header-actions" aria-label="상단 작업">
           {isArticleModalOpen && hideArticleModal && (
             <button className="open-draft-btn" onClick={() => setHideArticleModal(false)}>
               상세 조항 편집
@@ -454,6 +460,8 @@ export default function App() {
             onClick={() => {
               if (hasSession && window.confirm('현재 진행 중인 조례 작업이 있습니다. 새로 시작하시겠습니까?')) {
                 resetState()
+              } else if (hasSession) {
+                return
               }
               setIsOnboardingOpen(true)
             }}
@@ -504,6 +512,7 @@ export default function App() {
               setPendingQAContent(content)
               if (isArticleModalOpen && hideArticleModal) setHideArticleModal(false)
             }}
+            onNewSession={handleNewSession}
             fontSize={fontSize}
           />
 
@@ -539,7 +548,7 @@ export default function App() {
           similarOrdinances={similarOrdinances}
           pendingQAContent={pendingQAContent}
           onQAContentApplied={handleQAContentApplied}
-          onOpenQA={() => {/* QA panel is always visible */}}
+          onOpenQA={handleOpenQAFromArticleModal}
         />
       )}
 

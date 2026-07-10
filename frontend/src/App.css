@@ -1,7 +1,27 @@
 /* Reset & base */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --color-text: #1e293b;
+  --color-muted: #64748b;
+  --color-muted-strong: #475569;
+  --color-primary: #1e40af;
+  --focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.45);
+}
 html { -webkit-text-size-adjust: 100%; }
 body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; background: #f8fafc; color: #1e293b; overscroll-behavior: none; }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+.option-chip:focus-visible,
+.suggestion-chip:focus-visible,
+.article-nav-item:focus-visible {
+  outline: 2px solid #bfdbfe;
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
+}
 
 /* Layout */
 .app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overscroll-behavior: none; }
@@ -106,10 +126,10 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
 .empty-state {
   margin: auto;
   text-align: center;
-  color: #94a3b8;
+  color: var(--color-muted);
 }
 .empty-state p { font-size: 1rem; margin-bottom: 8px; }
-.empty-state .hint { font-size: 0.85rem; color: #cbd5e1; font-style: italic; }
+.empty-state .hint { font-size: 0.85rem; color: var(--color-muted); font-style: italic; }
 
 /* Messages */
 .message-row {
@@ -155,7 +175,7 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
 .dot {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: #94a3b8;
+  background: var(--color-muted);
   animation: bounce 1.2s infinite;
 }
 .dot:nth-child(2) { animation-delay: 0.2s; }
@@ -285,7 +305,7 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   border-radius: 12px;
   color: #64748b;
 }
-.no-issues { padding: 16px; color: #94a3b8; font-size: 0.85rem; }
+.no-issues { padding: 16px; color: var(--color-muted); font-size: 0.85rem; }
 .issue-list {
   list-style: none;
   overflow-y: auto;
@@ -450,7 +470,7 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   background: #ffffff;
   overflow-y: auto;
 }
-.draft-modal-textarea:disabled { background: #f8fafc; color: #94a3b8; }
+.draft-modal-textarea:disabled { background: #f8fafc; color: var(--color-muted); }
 
 /* Legal issues panel inside modal */
 .draft-modal-issues {
@@ -480,8 +500,8 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
 }
 .badge-high { background: #fef2f2; color: #ef4444; }
 .badge-ok   { background: #f0fdf4; color: #16a34a; }
-.draft-modal-issues-count { font-size: 0.75rem; color: #94a3b8; margin-left: auto; }
-.draft-modal-no-issues { padding: 12px 16px; font-size: 0.82rem; color: #94a3b8; }
+.draft-modal-issues-count { font-size: 0.75rem; color: var(--color-muted); margin-left: auto; }
+.draft-modal-no-issues { padding: 12px 16px; font-size: 0.82rem; color: var(--color-muted); }
 .draft-modal-issue-list { list-style: none; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .draft-modal-issue-item {
   padding: 8px 10px;
@@ -676,9 +696,13 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
     flex-shrink: 1;
     overflow-x: auto;
     padding-bottom: 2px;
-    scrollbar-width: none;
+    scrollbar-width: thin;
+    scroll-snap-type: x proximity;
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 28px), transparent 100%);
   }
-  .header-actions::-webkit-scrollbar { display: none; }
+  .header-actions > * { scroll-snap-align: start; }
+  .header-actions::-webkit-scrollbar { height: 4px; }
+  .header-actions::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.45); }
   .app-user-info { display: none !important; }
   .header-primary-action,
   .header-help-action,
@@ -1102,7 +1126,7 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
 
 .loading-modal-sub {
   font-size: 0.8rem;
-  color: #94a3b8;
+  color: var(--color-muted);
   text-align: center;
 }
 
@@ -1219,7 +1243,7 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
 
 .session-list-empty {
   text-align: center;
-  color: #94a3b8;
+  color: var(--color-muted);
   font-size: 0.95rem;
   line-height: 1.7;
   padding: 32px 0;
@@ -1295,7 +1319,7 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
 
 .session-card-date {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--color-muted);
 }
 
 .session-resume-btn {
@@ -1543,7 +1567,7 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   text-align: center;
   margin-top: 8px;
   font-size: 0.78rem;
-  color: #94a3b8;
+  color: var(--color-muted);
   background: none;
   border: none;
   cursor: pointer;

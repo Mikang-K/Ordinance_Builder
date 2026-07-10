@@ -9,6 +9,7 @@ interface StepConfig {
   placement: 'bottom' | 'right' | 'top-right' | 'center'
   showDarkOverlay: boolean
   nextLabel: string
+  waitForAction?: boolean
 }
 
 export const TUTORIAL_STEP_COUNT = 5
@@ -20,7 +21,8 @@ const TUTORIAL_STEPS: StepConfig[] = [
     description: '이 버튼을 눌러 새 조례 작성을 시작하세요. 마법사가 단계별로 안내해 드립니다.',
     placement: 'bottom',
     showDarkOverlay: true,
-    nextLabel: '알겠어요',
+    nextLabel: '버튼을 눌러 진행',
+    waitForAction: true,
   },
   {
     targetSelector: null,
@@ -28,15 +30,17 @@ const TUTORIAL_STEPS: StepConfig[] = [
     description: '조례 유형·지역·목적·대상을 선택하세요. 예시 칩을 클릭하거나 직접 입력할 수 있습니다. 완료 후 "조례 만들기 시작"을 눌러주세요.',
     placement: 'right',
     showDarkOverlay: false,
-    nextLabel: '알겠어요',
+    nextLabel: '입력을 완료해 진행',
+    waitForAction: true,
   },
   {
     targetSelector: null,
     title: '각 조문을 작성하세요',
-    description: '왼쪽 목록에서 조항을 선택하고 내용을 입력하세요. "기본값"이라고 입력하면 AI가 유사 조례를 참고해 자동으로 채워 드립니다.',
+    description: '왼쪽 목록에서 조항을 선택하고 내용을 입력하세요. 비워 둔 조항은 AI가 유사 조례를 참고해 자동으로 채워 드립니다.',
     placement: 'top-right',
     showDarkOverlay: false,
-    nextLabel: '알겠어요',
+    nextLabel: '조항 제출 후 진행',
+    waitForAction: true,
   },
   {
     targetSelector: null,
@@ -44,7 +48,8 @@ const TUTORIAL_STEPS: StepConfig[] = [
     description: '생성된 조례 초안을 직접 수정할 수 있습니다. "법률 검증" 버튼으로 상위법과의 충돌 여부를 확인해 보세요.',
     placement: 'top-right',
     showDarkOverlay: false,
-    nextLabel: '알겠어요',
+    nextLabel: '확정 후 진행',
+    waitForAction: true,
   },
   {
     targetSelector: null,
@@ -165,6 +170,7 @@ function TooltipCard({
 }) {
   const isFirst = step === 0
   const isLast = step === total - 1
+  const waitsForAction = config.waitForAction && !isLast
   const showArrowTop = config.placement === 'bottom' && !!targetRect
 
   const navBtnBase: React.CSSProperties = {
@@ -248,6 +254,22 @@ function TooltipCard({
           >
             완료 ✓
           </button>
+        ) : waitsForAction ? (
+          <span
+            className="tutorial-action-hint"
+            aria-live="polite"
+            style={{
+              padding: '7px 10px',
+              borderRadius: '16px',
+              background: '#eff6ff',
+              color: '#1d4ed8',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {config.nextLabel}
+          </span>
         ) : (
           <button
             onClick={onNext}
@@ -307,12 +329,12 @@ export default function TutorialOverlay({ step, onNext, onPrev, onSkip }: Props)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onSkip()
-      if (e.key === 'ArrowRight' && step < TUTORIAL_STEPS.length - 1) onNext()
+      if (e.key === 'ArrowRight' && step < TUTORIAL_STEPS.length - 1 && !config?.waitForAction) onNext()
       if (e.key === 'ArrowLeft' && step > 0) onPrev()
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [step, onNext, onPrev, onSkip])
+  }, [step, config?.waitForAction, onNext, onPrev, onSkip])
 
   if (step < 0 || step >= TUTORIAL_STEPS.length || !config) return null
 

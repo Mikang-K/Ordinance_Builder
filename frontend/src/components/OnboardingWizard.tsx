@@ -304,7 +304,11 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
         boxShadow: '0 8px 40px rgba(0,0,0,0.25)',
         overflow: 'hidden',
         position: 'relative',
-      }}>
+      }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={isTypeScreen ? 'onboarding-title-type' : 'onboarding-title-step'}
+      >
         <button
           onClick={onClose}
           style={{
@@ -329,10 +333,10 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
           {isTypeScreen ? (
             /* ── Step 0: Ordinance type selection ────────────────────────── */
             <>
-              <p style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              <p style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 STEP 0 / {totalSteps || 4}
               </p>
-              <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#1e293b', margin: '0 0 6px', lineHeight: 1.4 }}>
+              <h2 id="onboarding-title-type" style={{ fontSize: '1.3rem', fontWeight: 700, color: '#1e293b', margin: '0 0 6px', lineHeight: 1.4 }}>
                 어떤 유형의 조례를 만드시겠습니까?
               </h2>
               <p style={{ fontSize: '0.88rem', color: '#64748b', margin: '0 0 24px' }}>
@@ -362,7 +366,7 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
                       <div style={{ fontWeight: 700, fontSize: '0.92rem', marginBottom: '4px' }}>
                         {selected && '✓ '}{t.label}
                       </div>
-                      <div style={{ fontSize: '0.78rem', color: selected ? '#3b82f6' : '#94a3b8', lineHeight: 1.5 }}>
+                      <div style={{ fontSize: '0.78rem', color: selected ? '#3b82f6' : '#64748b', lineHeight: 1.5 }}>
                         {t.description}
                       </div>
                     </button>
@@ -373,10 +377,10 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
           ) : step ? (
             /* ── Steps 1–4: Field collection ─────────────────────────────── */
             <>
-              <p style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              <p style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 STEP {stepIndex + 1} / {totalSteps}
               </p>
-              <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#1e293b', margin: '0 0 6px', lineHeight: 1.4 }}>
+              <h2 id="onboarding-title-step" style={{ fontSize: '1.3rem', fontWeight: 700, color: '#1e293b', margin: '0 0 6px', lineHeight: 1.4 }}>
                 {step.title}
               </h2>
               <p style={{ fontSize: '0.88rem', color: '#64748b', margin: '0 0 24px' }}>
@@ -432,7 +436,7 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
                   }}
                 />
                 {!textValue.trim() && !chipValue && (
-                  <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#94a3b8' }}>
+                  <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#64748b' }}>
                     직접 입력
                   </span>
                 )}

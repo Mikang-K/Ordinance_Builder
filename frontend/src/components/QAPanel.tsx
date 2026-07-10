@@ -9,6 +9,7 @@ interface Props {
   qaHistory: QAMessage[]
   onAddMessages: (messages: QAMessage[]) => void
   onApplyContent: (content: string) => void
+  onNewSession?: () => void
   fontSize: number
 }
 
@@ -46,8 +47,8 @@ function SourceItem({ source }: { source: QASource }) {
         <span style={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {source.title}
         </span>
-        <span style={{ fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0 }}>{source.article_no}</span>
-        <span style={{ fontSize: '0.7rem', color: '#94a3b8', flexShrink: 0 }}>{expanded ? '▲' : '▼'}</span>
+        <span style={{ fontSize: '0.75rem', color: '#64748b', flexShrink: 0 }}>{source.article_no}</span>
+        <span style={{ fontSize: '0.7rem', color: '#64748b', flexShrink: 0 }}>{expanded ? '▲' : '▼'}</span>
       </button>
       {expanded && (
         <div style={{ padding: '0 10px 10px', fontSize: '0.78rem', color: '#374151', lineHeight: '1.6', borderTop: '1px solid #e2e8f0', background: '#ffffff' }}>
@@ -159,7 +160,7 @@ function QAMessageBubble({
 
       {!isUser && msg.sources && msg.sources.length > 0 && (
         <div className="qa-source-list" style={{ maxWidth: '88%', width: '100%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8', paddingLeft: '2px' }}>📋 법령 근거</span>
+          <span style={{ fontSize: '0.72rem', color: '#64748b', paddingLeft: '2px' }}>📋 법령 근거</span>
           {msg.sources.map((s, i) => <SourceItem key={i} source={s} />)}
         </div>
       )}
@@ -189,7 +190,7 @@ function QAMessageBubble({
 
 export default function QAPanel({
   sessionId, stage, currentArticleKey,
-  qaHistory, onAddMessages, onApplyContent, fontSize,
+  qaHistory, onAddMessages, onApplyContent, onNewSession, fontSize,
 }: Props) {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -262,15 +263,34 @@ export default function QAPanel({
       {/* Message history */}
       <div className="qa-message-list" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {qaHistory.length === 0 && (
-          <div style={{ margin: 'auto', textAlign: 'center', color: '#94a3b8', padding: '32px 16px' }}>
+          <div style={{ margin: 'auto', textAlign: 'center', color: '#64748b', padding: '32px 16px' }}>
             <p style={{ fontSize: '1.8rem', marginBottom: '12px' }}>⚖️</p>
             <p style={{ fontSize: '0.9rem', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>법령 기반 Q&amp;A</p>
             <p style={{ fontSize: '0.82rem', lineHeight: 1.6 }}>
               {sessionId
                 ? <>세션 생성 시 수집한 법령을 우선 참조하여 답변합니다.<br />해당 조례에 최적화된 법령 근거로 질문하세요.</>
-                : <>질문을 임베딩하여 법령·조례 전체 DB를 벡터 검색합니다.<br />어떤 법령이든 자유롭게 질문할 수 있습니다.</>
+                : <>질문을 임베딩하여 법령·조례 전체 DB를 벡터 검색합니다.<br />조례 초안 작성을 시작하려면 새 조례를 먼저 만드세요.</>
               }
             </p>
+            {!sessionId && onNewSession && (
+              <button
+                className="qa-empty-action"
+                onClick={onNewSession}
+                style={{
+                  marginTop: '16px',
+                  padding: '10px 18px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: '#1e40af',
+                  color: '#ffffff',
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                새 조례 만들기
+              </button>
+            )}
           </div>
         )}
         {qaHistory.map((msg, i) => (
@@ -285,7 +305,7 @@ export default function QAPanel({
         {isLoading && (
           <div style={{ display: 'flex', gap: '4px', alignItems: 'center', padding: '10px 14px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', width: 'fit-content' }}>
             {[0, 200, 400].map((d) => (
-              <span key={d} style={{ width: 7, height: 7, borderRadius: '50%', background: '#94a3b8', display: 'inline-block', animation: `bounce 1.2s ${d}ms infinite` }} />
+              <span key={d} style={{ width: 7, height: 7, borderRadius: '50%', background: '#64748b', display: 'inline-block', animation: `bounce 1.2s ${d}ms infinite` }} />
             ))}
           </div>
         )}
@@ -306,6 +326,7 @@ export default function QAPanel({
           rows={2}
           disabled={isLoading}
           className="qa-input"
+          id="qa-input"
           style={{
             flex: 1, padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: '8px',
             resize: 'none', fontSize: '0.88rem', fontFamily: 'inherit', outline: 'none',

@@ -38,6 +38,14 @@ export default function DraftModal({
     textareaRef.current?.focus()
   }, [])
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   const hasHighIssues = legalIssues?.some((i) => i.severity === 'HIGH') ?? false
   const sorted = legalIssues ? [...legalIssues].sort((a, b) => {
     const order = { HIGH: 0, MEDIUM: 1, LOW: 2 }
@@ -48,21 +56,38 @@ export default function DraftModal({
     if (e.target === e.currentTarget) onClose()
   }
 
+  const handleFinalizeClick = () => {
+    if (hasHighIssues) {
+      const highIssueCount = legalIssues?.filter((issue) => issue.severity === 'HIGH').length ?? 0
+      const confirmed = window.confirm(
+        `중대한 법률 이슈 ${highIssueCount}건이 남아 있습니다.\n재검증을 먼저 권장합니다. 그래도 초안을 확정하시겠습니까?`
+      )
+      if (!confirmed) return
+    }
+    onFinalize(editedDraft)
+  }
+
   return (
     <div className="draft-modal-backdrop" onClick={handleBackdropClick}>
-      <div className="draft-modal">
+      <div
+        className="draft-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="draft-modal-title"
+        aria-describedby="draft-modal-hint"
+      >
 
         {/* ── Header ── */}
         <div className="draft-modal-header">
           <div className="draft-modal-title">
-            <span className="draft-modal-icon">📄</span>
-            <h2>조례 초안 검토 · 편집</h2>
+            <span className="draft-modal-icon" aria-hidden="true">📄</span>
+            <h2 id="draft-modal-title">조례 초안 검토 · 편집</h2>
           </div>
           <button className="draft-modal-close" onClick={onClose} aria-label="닫기">✕</button>
         </div>
 
         {/* ── Hint ── */}
-        <div className="draft-modal-hint">
+        <div className="draft-modal-hint" id="draft-modal-hint">
           {legalIssues === null
             ? '초안을 직접 수정하신 후 법률 검증을 요청하세요.'
             : hasHighIssues
@@ -145,7 +170,7 @@ export default function DraftModal({
 
           <button
             className={`draft-modal-finalize-btn ${hasHighIssues ? 'has-warning' : ''}`}
-            onClick={() => onFinalize(editedDraft)}
+            onClick={handleFinalizeClick}
             disabled={isLoading}
             title={hasHighIssues ? '중대한 법률 이슈가 있습니다. 그래도 확정하시겠습니까?' : '초안을 최종 확정합니다'}
           >

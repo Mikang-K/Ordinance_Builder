@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { downloadFinalResult } from '../api'
 import type { LegalIssue } from '../types'
 
@@ -34,6 +34,14 @@ export default function CompletedDraftModal({ sessionId, draft, legalIssues, onC
     if (e.target === e.currentTarget) onClose()
   }
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   const handleDownload = async (format: 'txt' | 'docx') => {
     if (downloadingFormat) return
 
@@ -57,11 +65,16 @@ export default function CompletedDraftModal({ sessionId, draft, legalIssues, onC
 
   return (
     <div className="draft-modal-backdrop" onClick={handleBackdropClick}>
-      <div className="draft-modal completed-draft-modal">
+      <div
+        className="draft-modal completed-draft-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="completed-draft-title"
+      >
         <div className="draft-modal-header completed-draft-header">
           <div className="draft-modal-title">
             <span className="draft-modal-icon" aria-hidden="true">✓</span>
-            <h2>확정 조례 초안</h2>
+            <h2 id="completed-draft-title">확정 조례 초안</h2>
           </div>
           <div className="completed-draft-actions">
             <button
