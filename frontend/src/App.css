@@ -563,6 +563,25 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   flex-direction: column;
   max-height: 90vh;
 }
+.completed-draft-header {
+  gap: 12px;
+  align-items: flex-start;
+}
+.completed-draft-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.completed-draft-error {
+  flex-shrink: 0;
+  padding: 10px 20px;
+  background: #fef2f2;
+  border-bottom: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 0.82rem;
+}
 .completed-draft-body {
   flex: 1;
   overflow-y: auto;
@@ -801,6 +820,13 @@ body { font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif; backgro
   .draft-modal-header {
     padding: 12px 14px !important;
     min-height: 56px;
+  }
+  .completed-draft-header {
+    flex-direction: column;
+  }
+  .completed-draft-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
   .draft-modal-title {
     min-width: 0;

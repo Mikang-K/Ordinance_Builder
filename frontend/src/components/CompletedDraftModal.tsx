@@ -1,20 +1,53 @@
+import { useState } from 'react'
+import { downloadFinalResult } from '../api'
 import type { LegalIssue } from '../types'
 
 interface Props {
+  sessionId: string
   draft: string
   legalIssues: LegalIssue[] | null
   onClose: () => void
 }
 
 const SEVERITY_CONFIG = {
-  HIGH:   { label: '위반',  color: '#ef4444', bg: '#fef2f2', icon: '🔴' },
-  MEDIUM: { label: '주의',  color: '#f59e0b', bg: '#fffbeb', icon: '🟡' },
-  LOW:    { label: '제안',  color: '#22c55e', bg: '#f0fdf4', icon: '🟢' },
+  HIGH: { label: '위반', color: '#ef4444', bg: '#fef2f2' },
+  MEDIUM: { label: '주의', color: '#f59e0b', bg: '#fffbeb' },
+  LOW: { label: '제안', color: '#22c55e', bg: '#f0fdf4' },
+} as const
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
 
-export default function CompletedDraftModal({ draft, legalIssues, onClose }: Props) {
+export default function CompletedDraftModal({ sessionId, draft, legalIssues, onClose }: Props) {
+  const [downloadingFormat, setDownloadingFormat] = useState<'txt' | 'docx' | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) onClose()
+  }
+
+  const handleDownload = async (format: 'txt' | 'docx') => {
+    if (downloadingFormat) return
+
+    setDownloadError(null)
+    setDownloadingFormat(format)
+    try {
+      const blob = await downloadFinalResult(sessionId, format)
+      saveBlob(blob, `ordinance-final-${sessionId}.${format}`)
+    } catch (e) {
+      console.error('final result download failed:', e)
+      setDownloadError('파일 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      setDownloadingFormat(null)
+    }
   }
 
   const sorted = legalIssues ? [...legalIssues].sort((a, b) => {
@@ -25,30 +58,46 @@ export default function CompletedDraftModal({ draft, legalIssues, onClose }: Pro
   return (
     <div className="draft-modal-backdrop" onClick={handleBackdropClick}>
       <div className="draft-modal completed-draft-modal">
-
-        {/* Header */}
-        <div className="draft-modal-header">
+        <div className="draft-modal-header completed-draft-header">
           <div className="draft-modal-title">
-            <span className="draft-modal-icon">✅</span>
+            <span className="draft-modal-icon" aria-hidden="true">✓</span>
             <h2>확정 조례 초안</h2>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div className="completed-draft-actions">
             <button
               className="draft-modal-copy-btn"
               onClick={() => navigator.clipboard.writeText(draft)}
             >
               복사
             </button>
-            <button className="draft-modal-close" onClick={onClose} aria-label="닫기">✕</button>
+            <button
+              className="draft-modal-copy-btn"
+              disabled={downloadingFormat !== null}
+              onClick={() => handleDownload('txt')}
+            >
+              {downloadingFormat === 'txt' ? '저장 중...' : 'TXT 저장'}
+            </button>
+            <button
+              className="draft-modal-copy-btn"
+              disabled={downloadingFormat !== null}
+              onClick={() => handleDownload('docx')}
+            >
+              {downloadingFormat === 'docx' ? '저장 중...' : 'Word 저장'}
+            </button>
+            <button className="draft-modal-close" onClick={onClose} aria-label="닫기">×</button>
           </div>
         </div>
 
-        {/* Draft text */}
+        {downloadError && (
+          <div className="completed-draft-error" role="alert">
+            {downloadError}
+          </div>
+        )}
+
         <div className="completed-draft-body">
           <pre className="completed-draft-text">{draft}</pre>
         </div>
 
-        {/* Legal issues */}
         {legalIssues && legalIssues.length > 0 && (
           <div className="draft-modal-issues">
             <div className="draft-modal-issues-header">
@@ -65,7 +114,6 @@ export default function CompletedDraftModal({ draft, legalIssues, onClose }: Pro
                     style={{ borderLeftColor: cfg.color, background: cfg.bg }}
                   >
                     <div className="draft-modal-issue-row">
-                      <span>{cfg.icon}</span>
                       <span className="draft-modal-issue-severity" style={{ color: cfg.color }}>
                         {cfg.label}
                       </span>
@@ -77,7 +125,7 @@ export default function CompletedDraftModal({ draft, legalIssues, onClose }: Pro
                     </div>
                     <p className="draft-modal-issue-desc">{issue.description}</p>
                     {issue.suggestion && (
-                      <p className="draft-modal-issue-suggest">💡 {issue.suggestion}</p>
+                      <p className="draft-modal-issue-suggest">제안: {issue.suggestion}</p>
                     )}
                   </li>
                 )

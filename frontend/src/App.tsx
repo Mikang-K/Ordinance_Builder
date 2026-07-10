@@ -550,8 +550,9 @@ export default function App() {
         isLoading={isLoading}
       />
 
-      {isCompletedDraftModalOpen && completedDraft && (
+      {isCompletedDraftModalOpen && completedDraft && sessionIdRef.current && (
         <CompletedDraftModal
+          sessionId={sessionIdRef.current}
           draft={completedDraft}
           legalIssues={finalLegalIssues}
           onClose={() => setIsCompletedDraftModalOpen(false)}

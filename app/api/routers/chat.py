@@ -1,10 +1,13 @@
 import asyncio
+from io import BytesIO
 import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.api.schemas import (
@@ -108,6 +111,132 @@ def _require_ownership(entry: dict | None, user_id: str, session_id: str) -> dic
     if entry["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
     return entry
+
+
+def _legal_issue_value(issue: Any, key: str, default: str = "") -> str:
+    if isinstance(issue, dict):
+        value = issue.get(key, default)
+    else:
+        value = getattr(issue, key, default)
+    return "" if value is None else str(value)
+
+
+def _format_legal_issues_text(legal_issues: list[Any]) -> str:
+    if not legal_issues:
+        return "발견된 법률 검토 이슈가 없습니다."
+
+    lines: list[str] = []
+    for index, issue in enumerate(legal_issues, start=1):
+        severity = _legal_issue_value(issue, "severity", "UNKNOWN")
+        statute = _legal_issue_value(issue, "related_statute")
+        provision = _legal_issue_value(issue, "related_provision")
+        description = _legal_issue_value(issue, "description")
+        suggestion = _legal_issue_value(issue, "suggestion")
+        related = " ".join(part for part in [statute, provision] if part).strip()
+
+        lines.append(f"{index}. 중대도: {severity}")
+        if related:
+            lines.append(f"   관련 조항: {related}")
+        if description:
+            lines.append(f"   설명: {description}")
+        if suggestion:
+            lines.append(f"   제안: {suggestion}")
+    return "\n".join(lines)
+
+
+def _build_export_txt(
+    *,
+    session_id: str,
+    draft: str,
+    legal_issues: list[Any],
+    is_legally_valid: bool | None,
+    generated_at: str,
+) -> bytes:
+    review_status = (
+        "적합" if is_legally_valid is True
+        else "이슈 있음" if is_legally_valid is False
+        else "미확인"
+    )
+    content = "\n".join([
+        "조례 최종안",
+        f"생성일시: {generated_at}",
+        f"세션 ID: {session_id}",
+        f"법률 검토 상태: {review_status}",
+        "",
+        "[최종 초안]",
+        draft,
+        "",
+        "[법률 검토 결과]",
+        _format_legal_issues_text(legal_issues),
+        "",
+    ])
+    return content.encode("utf-8")
+
+
+def _build_export_docx(
+    *,
+    session_id: str,
+    draft: str,
+    legal_issues: list[Any],
+    is_legally_valid: bool | None,
+    generated_at: str,
+) -> bytes:
+    try:
+        from docx import Document
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Word 파일 생성을 위한 python-docx 의존성이 설치되어 있지 않습니다.",
+        ) from exc
+
+    review_status = (
+        "적합" if is_legally_valid is True
+        else "이슈 있음" if is_legally_valid is False
+        else "미확인"
+    )
+
+    document = Document()
+    document.add_heading("조례 최종안", level=1)
+    document.add_paragraph(f"생성일시: {generated_at}")
+    document.add_paragraph(f"세션 ID: {session_id}")
+    document.add_paragraph(f"법률 검토 상태: {review_status}")
+
+    document.add_heading("최종 초안", level=2)
+    for line in draft.splitlines() or [""]:
+        document.add_paragraph(line)
+
+    document.add_heading("법률 검토 결과", level=2)
+    if legal_issues:
+        for issue in legal_issues:
+            severity = _legal_issue_value(issue, "severity", "UNKNOWN")
+            statute = _legal_issue_value(issue, "related_statute")
+            provision = _legal_issue_value(issue, "related_provision")
+            description = _legal_issue_value(issue, "description")
+            suggestion = _legal_issue_value(issue, "suggestion")
+            related = " ".join(part for part in [statute, provision] if part).strip()
+
+            document.add_paragraph(f"중대도: {severity}", style="List Bullet")
+            if related:
+                document.add_paragraph(f"관련 조항: {related}")
+            if description:
+                document.add_paragraph(f"설명: {description}")
+            if suggestion:
+                document.add_paragraph(f"제안: {suggestion}")
+    else:
+        document.add_paragraph("발견된 법률 검토 이슈가 없습니다.")
+
+    buffer = BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+def _download_headers(filename: str) -> dict[str, str]:
+    encoded_filename = quote(filename)
+    return {
+        "Content-Disposition": (
+            f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
+        )
+    }
 
 
 # Stage that indicates the ordinance is fully confirmed by the user
@@ -474,6 +603,60 @@ async def finalize_session(
         draft=final_draft,
         legal_issues=legal_issues,
         is_legally_valid=is_valid,
+    )
+
+
+@router.get("/session/{session_id}/export")
+async def export_final_result(
+    session_id: uuid.UUID,
+    format: str = Query("txt", pattern="^(txt|docx)$"),
+    user_id: str = Depends(get_current_user),
+):
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
+
+    if entry["stage"] != "completed":
+        raise HTTPException(status_code=409, detail="완료된 세션만 파일로 저장할 수 있습니다.")
+
+    graph = get_graph()
+    config = {"configurable": {"thread_id": sid}}
+    state_snapshot = await graph.aget_state(config)
+    values = (state_snapshot.values or {}) if state_snapshot else {}
+
+    draft = values.get("draft_full_text", "")
+    if not draft:
+        raise HTTPException(status_code=400, detail="저장할 최종 초안이 없습니다.")
+
+    legal_issues = values.get("legal_issues") or []
+    is_valid = values.get("is_legally_valid")
+    generated_at = datetime.now(timezone.utc).isoformat()
+
+    if format == "txt":
+        data = _build_export_txt(
+            session_id=sid,
+            draft=draft,
+            legal_issues=legal_issues,
+            is_legally_valid=is_valid,
+            generated_at=generated_at,
+        )
+        filename = f"ordinance-final-{sid}.txt"
+        media_type = "text/plain; charset=utf-8"
+    else:
+        data = _build_export_docx(
+            session_id=sid,
+            draft=draft,
+            legal_issues=legal_issues,
+            is_legally_valid=is_valid,
+            generated_at=generated_at,
+        )
+        filename = f"ordinance-final-{sid}.docx"
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    return StreamingResponse(
+        BytesIO(data),
+        media_type=media_type,
+        headers=_download_headers(filename),
     )
 
 

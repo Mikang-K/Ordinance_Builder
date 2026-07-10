@@ -78,6 +78,17 @@ export async function finalizeSession(
   return res.json()
 }
 
+export async function downloadFinalResult(
+  sessionId: string,
+  format: 'txt' | 'docx',
+): Promise<Blob> {
+  const res = await fetch(apiUrl(`/api/v1/session/${sessionId}/export?format=${format}`), {
+    headers: await authHeaders(),
+  })
+  if (!res.ok) throw new Error(`파일 저장 요청 실패: ${res.status}`)
+  return res.blob()
+}
+
 export async function listSessions(): Promise<SessionSummary[]> {
   const res = await fetch(apiUrl('/api/v1/sessions'), {
     headers: await authHeaders(),
