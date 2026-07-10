@@ -81,8 +81,12 @@ export async function finalizeSession(
 export async function downloadFinalResult(
   sessionId: string,
   format: 'txt' | 'docx',
+  filename?: string,
 ): Promise<Blob> {
-  const res = await fetch(apiUrl(`/api/v1/session/${sessionId}/export?format=${format}`), {
+  const params = new URLSearchParams({ format })
+  if (filename) params.set('filename', filename)
+
+  const res = await fetch(apiUrl(`/api/v1/session/${sessionId}/export?${params.toString()}`), {
     headers: await authHeaders(),
   })
   if (!res.ok) throw new Error(`파일 저장 요청 실패: ${res.status}`)

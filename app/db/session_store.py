@@ -35,6 +35,8 @@ _MIGRATE_SQL = """
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS qa_history JSONB NOT NULL DEFAULT '[]'::jsonb;
 """
 
+_INIT_DB_LOCK_ID = 872139016233
+
 _pool: AsyncConnectionPool | None = None
 
 
@@ -49,6 +51,7 @@ async def init_db() -> None:
     )
     await _pool.open()
     async with _pool.connection() as conn:
+        await conn.execute("SELECT pg_advisory_xact_lock(%s)", (_INIT_DB_LOCK_ID,))
         await conn.execute(_CREATE_TABLE_SQL)
         await conn.execute(_MIGRATE_SQL)
         await conn.commit()

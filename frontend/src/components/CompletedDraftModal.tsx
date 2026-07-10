@@ -15,6 +15,17 @@ const SEVERITY_CONFIG = {
   LOW: { label: '제안', color: '#22c55e', bg: '#f0fdf4' },
 } as const
 
+const DEFAULT_FILE_BASENAME = '조례-최종-초안'
+
+function normalizeFilename(value: string, format: 'txt' | 'docx') {
+  const withoutExtension = value
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
+    .replace(/\.+$/, '')
+    .replace(/\.(txt|docx)$/i, '')
+  return `${withoutExtension || DEFAULT_FILE_BASENAME}.${format}`
+}
+
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
@@ -29,6 +40,7 @@ function saveBlob(blob: Blob, filename: string) {
 export default function CompletedDraftModal({ sessionId, draft, legalIssues, onClose }: Props) {
   const [downloadingFormat, setDownloadingFormat] = useState<'txt' | 'docx' | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [filename, setFilename] = useState(DEFAULT_FILE_BASENAME)
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) onClose()
@@ -48,8 +60,9 @@ export default function CompletedDraftModal({ sessionId, draft, legalIssues, onC
     setDownloadError(null)
     setDownloadingFormat(format)
     try {
-      const blob = await downloadFinalResult(sessionId, format)
-      saveBlob(blob, `ordinance-final-${sessionId}.${format}`)
+      const downloadName = normalizeFilename(filename, format)
+      const blob = await downloadFinalResult(sessionId, format, downloadName)
+      saveBlob(blob, downloadName)
     } catch (e) {
       console.error('final result download failed:', e)
       setDownloadError('파일 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.')
@@ -77,6 +90,16 @@ export default function CompletedDraftModal({ sessionId, draft, legalIssues, onC
             <h2 id="completed-draft-title">확정 조례 초안</h2>
           </div>
           <div className="completed-draft-actions">
+            <label className="completed-draft-filename">
+              <span>파일 이름</span>
+              <input
+                type="text"
+                value={filename}
+                onChange={(event) => setFilename(event.target.value)}
+                placeholder={DEFAULT_FILE_BASENAME}
+                disabled={downloadingFormat !== null}
+              />
+            </label>
             <button
               className="draft-modal-copy-btn"
               onClick={() => navigator.clipboard.writeText(draft)}

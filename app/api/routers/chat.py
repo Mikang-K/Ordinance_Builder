@@ -1,6 +1,7 @@
 import asyncio
 from io import BytesIO
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -144,90 +145,56 @@ def _format_legal_issues_text(legal_issues: list[Any]) -> str:
     return "\n".join(lines)
 
 
-def _build_export_txt(
-    *,
-    session_id: str,
-    draft: str,
-    legal_issues: list[Any],
-    is_legally_valid: bool | None,
-    generated_at: str,
-) -> bytes:
-    review_status = (
-        "적합" if is_legally_valid is True
-        else "이슈 있음" if is_legally_valid is False
-        else "미확인"
-    )
-    content = "\n".join([
-        "조례 최종안",
-        f"생성일시: {generated_at}",
-        f"세션 ID: {session_id}",
-        f"법률 검토 상태: {review_status}",
-        "",
-        "[최종 초안]",
-        draft,
-        "",
-        "[법률 검토 결과]",
-        _format_legal_issues_text(legal_issues),
-        "",
-    ])
-    return content.encode("utf-8")
+_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
-def _build_export_docx(
-    *,
-    session_id: str,
-    draft: str,
-    legal_issues: list[Any],
-    is_legally_valid: bool | None,
-    generated_at: str,
-) -> bytes:
+def _build_export_txt(*, draft: str) -> bytes:
+    return draft.encode("utf-8")
+
+
+def _set_docx_korean_font(document: Any, font_name: str = "맑은 고딕") -> None:
+    from docx.oxml.ns import qn
+
+    target_styles = [
+        document.styles["Normal"],
+        document.styles["Heading 1"],
+        document.styles["Heading 2"],
+    ]
+    for style in target_styles:
+        style.font.name = font_name
+        style._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), font_name)
+
+
+def _build_export_docx(*, draft: str) -> bytes:
     try:
         from docx import Document
+        from docx.oxml.ns import qn
     except ImportError as exc:
         raise HTTPException(
             status_code=500,
             detail="Word 파일 생성을 위한 python-docx 의존성이 설치되어 있지 않습니다.",
         ) from exc
 
-    review_status = (
-        "적합" if is_legally_valid is True
-        else "이슈 있음" if is_legally_valid is False
-        else "미확인"
-    )
-
     document = Document()
-    document.add_heading("조례 최종안", level=1)
-    document.add_paragraph(f"생성일시: {generated_at}")
-    document.add_paragraph(f"세션 ID: {session_id}")
-    document.add_paragraph(f"법률 검토 상태: {review_status}")
-
-    document.add_heading("최종 초안", level=2)
+    font_name = "맑은 고딕"
+    _set_docx_korean_font(document, font_name)
     for line in draft.splitlines() or [""]:
-        document.add_paragraph(line)
-
-    document.add_heading("법률 검토 결과", level=2)
-    if legal_issues:
-        for issue in legal_issues:
-            severity = _legal_issue_value(issue, "severity", "UNKNOWN")
-            statute = _legal_issue_value(issue, "related_statute")
-            provision = _legal_issue_value(issue, "related_provision")
-            description = _legal_issue_value(issue, "description")
-            suggestion = _legal_issue_value(issue, "suggestion")
-            related = " ".join(part for part in [statute, provision] if part).strip()
-
-            document.add_paragraph(f"중대도: {severity}", style="List Bullet")
-            if related:
-                document.add_paragraph(f"관련 조항: {related}")
-            if description:
-                document.add_paragraph(f"설명: {description}")
-            if suggestion:
-                document.add_paragraph(f"제안: {suggestion}")
-    else:
-        document.add_paragraph("발견된 법률 검토 이슈가 없습니다.")
+        paragraph = document.add_paragraph(line)
+        for run in paragraph.runs:
+            run.font.name = font_name
+            run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), font_name)
 
     buffer = BytesIO()
     document.save(buffer)
     return buffer.getvalue()
+
+
+def _safe_download_filename(filename: str | None, extension: str, fallback_stem: str) -> str:
+    stem = (filename or "").strip()
+    if stem.lower().endswith(f".{extension}"):
+        stem = stem[: -(len(extension) + 1)]
+    stem = _INVALID_FILENAME_CHARS.sub("-", stem).strip(" .")
+    return f"{stem or fallback_stem}.{extension}"
 
 
 def _download_headers(filename: str) -> dict[str, str]:
@@ -610,6 +577,7 @@ async def finalize_session(
 async def export_final_result(
     session_id: uuid.UUID,
     format: str = Query("txt", pattern="^(txt|docx)$"),
+    filename: str | None = Query(None, min_length=1, max_length=120),
     user_id: str = Depends(get_current_user),
 ):
     sid = str(session_id)
@@ -628,35 +596,19 @@ async def export_final_result(
     if not draft:
         raise HTTPException(status_code=400, detail="저장할 최종 초안이 없습니다.")
 
-    legal_issues = values.get("legal_issues") or []
-    is_valid = values.get("is_legally_valid")
-    generated_at = datetime.now(timezone.utc).isoformat()
-
     if format == "txt":
-        data = _build_export_txt(
-            session_id=sid,
-            draft=draft,
-            legal_issues=legal_issues,
-            is_legally_valid=is_valid,
-            generated_at=generated_at,
-        )
-        filename = f"ordinance-final-{sid}.txt"
+        data = _build_export_txt(draft=draft)
+        download_filename = _safe_download_filename(filename, "txt", f"ordinance-final-{sid}")
         media_type = "text/plain; charset=utf-8"
     else:
-        data = _build_export_docx(
-            session_id=sid,
-            draft=draft,
-            legal_issues=legal_issues,
-            is_legally_valid=is_valid,
-            generated_at=generated_at,
-        )
-        filename = f"ordinance-final-{sid}.docx"
+        data = _build_export_docx(draft=draft)
+        download_filename = _safe_download_filename(filename, "docx", f"ordinance-final-{sid}")
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     return StreamingResponse(
         BytesIO(data),
         media_type=media_type,
-        headers=_download_headers(filename),
+        headers=_download_headers(download_filename),
     )
 
 
