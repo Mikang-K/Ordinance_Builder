@@ -18,6 +18,8 @@ from app.api.schemas import (
     FinalizeRequest,
     FinalizeResponse,
     MessageRecord,
+    ModelStatusItem,
+    ModelStatusResponse,
     QADirectRequest,
     QAMessageRecord,
     QARequest,
@@ -49,6 +51,29 @@ from app.services.qa_service import direct_search_qa
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["ordinance"])
+
+
+def _role_llm(role: str):
+    config = settings.llm_config(role)
+    return get_llm(config["provider"], model=config["model"], base_url=config["base_url"], timeout=config["timeout"])
+
+
+@router.get("/model-status", response_model=ModelStatusResponse)
+async def model_status() -> ModelStatusResponse:
+    """Return selected model metadata without credentials or endpoint URLs."""
+    models = []
+    for role in ("intent", "drafting", "reviewer", "legal"):
+        config = settings.llm_config(role)
+        available = settings.llm_available(role)
+        models.append(ModelStatusItem(
+            role=role, provider=str(config["provider"]), model=str(config["model"]),
+            deployment="local" if config["provider"] in {"ollama", "openai_compatible"} else "cloud",
+            status="available" if available else "unavailable",
+            detail=None if available else "configuration_missing",
+        ))
+    count = sum(item.status == "available" for item in models)
+    overall = "available" if count == len(models) else ("degraded" if count else "unavailable")
+    return ModelStatusResponse(status=overall, models=models)
 
 # 필드별 채팅 칩 선택지 (인터뷰 단계에서 사용)
 _FIELD_OPTIONS: dict[str, list[dict]] = {
@@ -197,11 +222,16 @@ def _safe_download_filename(filename: str | None, extension: str, fallback_stem:
     return f"{stem or fallback_stem}.{extension}"
 
 
-def _download_headers(filename: str) -> dict[str, str]:
+def _download_headers(filename: str, fallback_filename: str = "ordinance-final") -> dict[str, str]:
     encoded_filename = quote(filename)
+    extension = filename.rsplit(".", 1)[-1] if "." in filename else "txt"
+    ascii_fallback = _INVALID_FILENAME_CHARS.sub("-", fallback_filename).strip(" .")
+    ascii_fallback = re.sub(r"[^A-Za-z0-9._-]", "-", ascii_fallback) or "ordinance-final"
+    if not ascii_fallback.lower().endswith(f".{extension.lower()}"):
+        ascii_fallback = f"{ascii_fallback}.{extension}"
     return {
         "Content-Disposition": (
-            f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
+            f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded_filename}'
         )
     }
 
@@ -685,7 +715,7 @@ async def qa_chat(
 
     # 5. LLM 구조화 출력 호출
     try:
-        llm = get_llm(settings.LLM_INTENT)
+        llm = _role_llm("intent")
         structured_llm = llm.with_structured_output(QAOutput)
         human_text = build_qa_human(
             question=body.question,
@@ -759,7 +789,7 @@ async def qa_direct(
         result, legal_basis, legal_terms, similar_ordinances = await direct_search_qa(
             question=body.question,
             db=db,
-            llm=get_llm(settings.LLM_INTENT),
+            llm=_role_llm("intent"),
             current_article_key=body.current_article_key,
             ordinance_info=body.ordinance_info,
         )

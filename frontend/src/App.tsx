@@ -12,6 +12,7 @@ import CompletedDraftModal from './components/CompletedDraftModal'
 import QAPanel from './components/QAPanel'
 import OnboardingWizard from './components/OnboardingWizard'
 import TutorialOverlay, { TUTORIAL_STEP_COUNT } from './components/TutorialOverlay'
+import ModelStatus from './components/ModelStatus'
 
 export default function App() {
   // ── 인증 상태 ──────────────────────────────────────────────────────────────
@@ -383,6 +384,7 @@ export default function App() {
   if (view === 'list') {
     return (
       <>
+        <ModelStatus />
         <SessionListScreen
           onSelectSession={handleSelectSession}
           onNewSession={handleNewSession}
@@ -439,6 +441,7 @@ export default function App() {
           </span>
         )}
         <div className="header-actions" aria-label="상단 작업">
+          <ModelStatus />
           {isArticleModalOpen && hideArticleModal && (
             <button className="open-draft-btn" onClick={() => setHideArticleModal(false)}>
               상세 조항 편집

@@ -67,15 +67,20 @@ def create_workflow(checkpointer: AsyncPostgresSaver):
 
         legal_checker ──→ END  (user decides: re-check or finalize via /finalize)
     """
-    # 노드별 역할에 최적화된 LLM 배정
-    # intent_analyzer : Gemini 2.5 Pro  — 한국어 구조화 추출
-    # drafting_agent  : Claude Opus 4.6 — 장문 법적 문서 작성
-    # draft_reviewer  : Claude Opus 4.6 — 초안 수정 생성
-    # legal_checker   : GPT-4o          — 비판적 법률 분석
-    intent_llm   = get_llm(settings.LLM_INTENT)
-    drafting_llm = get_llm(settings.LLM_DRAFTING)
-    reviewer_llm = get_llm(settings.LLM_REVIEWER)
-    legal_llm    = get_llm(settings.LLM_LEGAL)
+    # 모든 생성·검토 노드는 동일한 Gemini 모델을 사용합니다.
+    def role_llm(role: str):
+        config = settings.llm_config(role)
+        return get_llm(
+            config["provider"],
+            model=config["model"],
+            base_url=config["base_url"],
+            timeout=config["timeout"],
+        )
+
+    intent_llm = role_llm("intent")
+    drafting_llm = role_llm("drafting")
+    reviewer_llm = role_llm("reviewer")
+    legal_llm = role_llm("legal")
 
     global _db_instance
     db = Neo4jGraphDB(settings.NEO4J_URI, settings.NEO4J_USER, settings.NEO4J_PASSWORD)

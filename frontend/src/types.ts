@@ -116,3 +116,8 @@ export interface QAResponse {
   applicable_content?: string | null
   applicable_article_key?: string | null
 }
+
+export type ModelDeployment = 'local' | 'cloud' | string
+export type ModelAvailability = 'available' | 'degraded' | 'unavailable' | string
+export interface ModelRuntimeStatus { role: string; provider: string; model: string; deployment: ModelDeployment; status: ModelAvailability; detail?: string | null }
+export interface ModelStatusResponse { status: ModelAvailability; models: ModelRuntimeStatus[] }

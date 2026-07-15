@@ -76,36 +76,38 @@ export default function SessionListScreen({ onSelectSession, onNewSession, onTut
             </button>
           </div>
         )}
-        <h1 className="session-list-title">조례 빌더 AI</h1>
-        <p className="session-list-subtitle">지방 조례 초안 자동 생성 서비스</p>
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+        <div className="session-hero-eyebrow"><span>AI LEGISLATIVE WORKBENCH</span><span className="session-hero-rule" /></div>
+        <h1 className="session-list-title">근거에서 조문까지,<br /><span>신뢰할 수 있는 조례 설계</span></h1>
+        <p className="session-list-subtitle">법령 근거와 유사 조례를 바탕으로 초안 작성부터 법률 검토까지 지원합니다.</p>
+        <div className="session-hero-actions">
           <button id="btn-new-session" className="new-session-btn" onClick={onNewSession}>
-            + 새 조례 만들기
+            <span aria-hidden="true">＋</span> 새 조례 설계 시작
           </button>
           {onTutorial && (
-            <button
-              onClick={onTutorial}
-              style={{
-                padding: '12px 24px',
-                background: 'rgba(255,255,255,0.15)',
-                border: '1.5px solid rgba(255,255,255,0.5)',
-                borderRadius: '10px',
-                color: '#ffffff',
-                fontSize: '0.95rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'background 0.2s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.25)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
-            >
-              📖 튜토리얼 보기
+            <button onClick={onTutorial} className="session-tutorial-btn">
+              사용 안내 <span aria-hidden="true">→</span>
             </button>
           )}
+        </div>
+        <div className="session-workflow" aria-label="조례 설계 절차">
+          {['기본정보', '근거 탐색', '조문 설계', '법률 검토', '초안 확정'].map((label, index) => (
+            <div className="session-workflow-step" key={label}>
+              <span>{String(index + 1).padStart(2, '0')}</span>
+              <strong>{label}</strong>
+            </div>
+          ))}
         </div>
       </div>
 
       <div className="session-list-body">
+        <div className="session-body-heading">
+          <div>
+            <span className="session-section-kicker">WORKSPACE</span>
+            <h2>조례 설계 작업함</h2>
+            <p>진행 중인 업무를 이어가거나 새로운 조례 설계를 시작하세요.</p>
+          </div>
+          <div className="session-trust-mark"><span>✓</span><div><strong>근거 중심 설계</strong><small>법령 · 유사 조례 연계</small></div></div>
+        </div>
         {isLoading && (
           <p className="session-list-empty">불러오는 중...</p>
         )}
@@ -122,7 +124,7 @@ export default function SessionListScreen({ onSelectSession, onNewSession, onTut
 
         {sessions.length > 0 && (
           <>
-            <h2 className="session-list-section-title">이전 작업</h2>
+            <h2 className="session-list-section-title">최근 작업 <span>{sessions.length}</span></h2>
             <ul className="session-list">
               {sessions.map((s) => (
                 <li key={s.session_id} className="session-card">

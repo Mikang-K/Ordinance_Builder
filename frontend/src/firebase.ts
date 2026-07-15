@@ -5,6 +5,7 @@ import {
   getAuth,
   getRedirectResult,
   onAuthStateChanged,
+  signInWithPopup,
   signInWithRedirect,
   signOut,
 } from 'firebase/auth'
@@ -19,7 +20,21 @@ const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const googleProvider = new GoogleAuthProvider()
 
-export const loginWithGoogle = () => signInWithRedirect(auth, googleProvider)
+const isLocalDevelopment =
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1'
+
+export const loginWithGoogle = async () => {
+  // 로컬에서는 Firebase 인증 도메인과 앱의 출처가 달라 redirect 인증 상태가
+  // 브라우저의 타사 저장소 제한에 의해 유실될 수 있으므로 popup 방식을 사용한다.
+  if (isLocalDevelopment) {
+    await signInWithPopup(auth, googleProvider)
+    return
+  }
+
+  // 배포 환경에서는 기존 Firebase Hosting redirect 로그인 흐름을 유지한다.
+  await signInWithRedirect(auth, googleProvider)
+}
 export const logout = () => signOut(auth)
 export { onAuthStateChanged, getRedirectResult }
 export type { User }

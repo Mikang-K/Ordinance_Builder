@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { REGIONS } from '../constants/regions'
 
 // ── Type definitions ──────────────────────────────────────────────────────────
 
@@ -222,7 +223,10 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
   const [selectedType, setSelectedType] = useState<string>('')
   const [stepIndex, setStepIndex] = useState(-1)   // -1 = type selection screen
   const [selections, setSelections] = useState<Record<string, string>>({})
+  const [multiSelections, setMultiSelections] = useState<Record<string, string[]>>({})
   const [textInputs, setTextInputs] = useState<Record<string, string>>({})
+  const [selectedSido, setSelectedSido] = useState<string>('')
+  const [selectedSigungu, setSelectedSigungu] = useState<string>('')
 
   if (!isOpen) return null
 
@@ -230,10 +234,13 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
   const isTypeScreen = stepIndex === -1
   const step = isTypeScreen ? null : typeSteps[stepIndex]
   const totalSteps = typeSteps.length  // 4 steps after type selection
+  const isRegionStep = step?.field === 'region'
   const chipValue = step ? (selections[step.field] ?? '') : ''
+  const selectedChips = step ? (multiSelections[step.field] ?? []) : []
   const textValue = step ? (textInputs[step.field] ?? '') : ''
-  const currentValue = textValue.trim() || chipValue
+  const currentValue = textValue.trim() || (isRegionStep ? chipValue : selectedChips.join(', '))
   const canAdvance = isTypeScreen ? !!selectedType : !!currentValue
+  const selectedRegionGroup = REGIONS.find(region => region.sido === selectedSido)
 
   const handleTypeSelect = (type: string) => {
     setSelectedType(prev => prev === type ? '' : type)
@@ -241,7 +248,13 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
 
   const handleChipClick = (opt: string) => {
     if (!step) return
-    setSelections(prev => ({ ...prev, [step.field]: prev[step.field] === opt ? '' : opt }))
+    setMultiSelections(prev => {
+      const current = prev[step.field] ?? []
+      const next = current.includes(opt)
+        ? current.filter(value => value !== opt)
+        : [...current, opt]
+      return { ...prev, [step.field]: next }
+    })
     setTextInputs(prev => ({ ...prev, [step.field]: '' }))
   }
 
@@ -250,7 +263,28 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
     setTextInputs(prev => ({ ...prev, [step.field]: val }))
     if (val.trim()) {
       setSelections(prev => ({ ...prev, [step.field]: '' }))
+      setMultiSelections(prev => ({ ...prev, [step.field]: [] }))
+      if (step.field === 'region') {
+        setSelectedSido('')
+        setSelectedSigungu('')
+      }
     }
+  }
+
+  const handleSidoSelect = (sido: string) => {
+    const group = REGIONS.find(region => region.sido === sido)
+    setSelectedSido(sido)
+    setSelectedSigungu('')
+    setTextInputs(prev => ({ ...prev, region: '' }))
+    setSelections(prev => ({ ...prev, region: group?.sigungu.length ? '' : sido }))
+  }
+
+  const handleSigunguSelect = (sigungu: string) => {
+    if (!selectedSido) return
+    const region = sigungu ? `${selectedSido} ${sigungu}` : selectedSido
+    setSelectedSigungu(sigungu)
+    setTextInputs(prev => ({ ...prev, region: '' }))
+    setSelections(prev => ({ ...prev, region }))
   }
 
   const handleNext = () => {
@@ -270,7 +304,12 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
   }
 
   const handleSubmit = () => {
-    const get = (field: string) => textInputs[field]?.trim() || selections[field] || ''
+    const get = (field: string) => (
+      textInputs[field]?.trim()
+      || selections[field]
+      || multiSelections[field]?.join(', ')
+      || ''
+    )
     const fields = {
       region: get('region'),
       purpose: get('purpose'),
@@ -387,32 +426,83 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
                 {step.description}
               </p>
 
-              <div className="onboarding-chip-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
-                {step.options.map(opt => {
-                  const selected = chipValue === opt
-                  return (
-                    <button
-                      key={opt}
-                      onClick={() => handleChipClick(opt)}
+              {isRegionStep ? (
+                <div className="region-selector">
+                  <fieldset className="region-selector-group">
+                    <legend>시·도 선택</legend>
+                    <select
+                      className="region-select"
+                      value={selectedSido}
+                      onChange={event => handleSidoSelect(event.target.value)}
                       disabled={isLoading}
-                      style={{
-                        padding: '8px 16px',
-                        borderRadius: '20px',
-                        border: selected ? '2px solid #1e40af' : '1.5px solid #cbd5e1',
-                        background: selected ? '#eff6ff' : '#ffffff',
-                        color: selected ? '#1e40af' : '#475569',
-                        fontWeight: selected ? 700 : 500,
-                        fontSize: '0.88rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s',
-                        boxShadow: selected ? '0 0 0 3px rgba(30,64,175,0.1)' : 'none',
-                      }}
+                      aria-label="시·도 선택"
                     >
-                      {selected && '✓ '}{opt}
-                    </button>
-                  )
-                })}
-              </div>
+                      <option value="">시·도를 선택해 주세요</option>
+                      {REGIONS.map(region => (
+                        <option key={region.sido} value={region.sido}>
+                          {region.sido}
+                        </option>
+                      ))}
+                    </select>
+                  </fieldset>
+
+                  {selectedRegionGroup && selectedRegionGroup.sigungu.length > 0 && (
+                    <fieldset className="region-selector-group" aria-live="polite">
+                      <legend>{selectedSido} 시·군·구 선택</legend>
+                      <select
+                        className="region-select"
+                        value={chipValue === selectedSido ? '__all__' : selectedSigungu}
+                        onChange={event => handleSigunguSelect(event.target.value === '__all__' ? '' : event.target.value)}
+                        disabled={isLoading}
+                        aria-label={`${selectedSido} 시·군·구 선택`}
+                      >
+                        <option value="">시·군·구를 선택해 주세요</option>
+                        <option value="__all__">{selectedSido} 전체</option>
+                        {selectedRegionGroup.sigungu.map(sigungu => (
+                          <option key={sigungu} value={sigungu}>
+                            {sigungu}
+                          </option>
+                        ))}
+                      </select>
+                    </fieldset>
+                  )}
+
+                  {chipValue && (
+                    <div className="region-selected-summary">
+                      선택한 지역: <strong>{chipValue}</strong>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="onboarding-chip-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
+                  {step.options.map(opt => {
+                    const selected = selectedChips.includes(opt)
+                    return (
+                      <button
+                        key={opt}
+                        onClick={() => handleChipClick(opt)}
+                        disabled={isLoading}
+                        type="button"
+                        aria-pressed={selected}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '20px',
+                          border: selected ? '2px solid #1e40af' : '1.5px solid #cbd5e1',
+                          background: selected ? '#eff6ff' : '#ffffff',
+                          color: selected ? '#1e40af' : '#475569',
+                          fontWeight: selected ? 700 : 500,
+                          fontSize: '0.88rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                          boxShadow: selected ? '0 0 0 3px rgba(30,64,175,0.1)' : 'none',
+                        }}
+                      >
+                        {selected && '✓ '}{opt}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
               <div style={{ position: 'relative' }}>
                 <input
@@ -435,7 +525,7 @@ export default function OnboardingWizard({ isOpen, onClose, onStart, isLoading }
                     transition: 'border-color 0.15s',
                   }}
                 />
-                {!textValue.trim() && !chipValue && (
+                {!textValue.trim() && !currentValue && (
                   <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#64748b' }}>
                     직접 입력
                   </span>

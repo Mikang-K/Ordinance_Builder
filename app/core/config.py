@@ -3,8 +3,12 @@ from typing import Literal
 from pydantic_settings import BaseSettings
 
 
+LLMProvider = Literal["gemini", "openai", "anthropic", "ollama", "openai_compatible"]
+
+
 class Settings(BaseSettings):
-    GOOGLE_API_KEY: str
+    # Optional so a fully local LLM configuration does not require cloud credentials.
+    GOOGLE_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
 
@@ -14,10 +18,57 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "models/gemini-embedding-001"
 
     # 노드별 LLM provider 설정
-    LLM_INTENT: Literal["gemini", "openai", "anthropic"] = "gemini"
-    LLM_DRAFTING: Literal["gemini", "openai", "anthropic"] = "anthropic"
-    LLM_REVIEWER: Literal["gemini", "openai", "anthropic"] = "anthropic"
-    LLM_LEGAL: Literal["gemini", "openai", "anthropic"] = "openai"
+    LLM_INTENT: LLMProvider = "gemini"
+    LLM_DRAFTING: LLMProvider = "gemini"
+    LLM_REVIEWER: LLMProvider = "gemini"
+    LLM_LEGAL: LLMProvider = "gemini"
+
+    LLM_INTENT_MODEL: str = ""
+    LLM_DRAFTING_MODEL: str = ""
+    LLM_REVIEWER_MODEL: str = ""
+    LLM_LEGAL_MODEL: str = ""
+    LLM_OLLAMA_BASE_URL: str = "http://localhost:11434"
+    LLM_OPENAI_COMPATIBLE_BASE_URL: str = "http://localhost:11434/v1"
+    LLM_OPENAI_COMPATIBLE_API_KEY: str = ""
+    LLM_TIMEOUT_SECONDS: float = 120.0
+    LLM_FALLBACK_ENABLED: bool = False
+
+    def llm_config(self, role: str) -> dict[str, str | float | bool | None]:
+        """Return the non-secret model configuration for a workflow role."""
+        normalized = role.upper()
+        provider = getattr(self, f"LLM_{normalized}")
+        model = getattr(self, f"LLM_{normalized}_MODEL") or {
+            "gemini": "gemini-2.5-pro",
+            "openai": "gpt-4o",
+            "anthropic": "claude-opus-4-7",
+            "ollama": "qwen2.5:14b",
+            "openai_compatible": "local-model",
+        }[provider]
+        base_url = None
+        if provider == "ollama":
+            base_url = self.LLM_OLLAMA_BASE_URL
+        elif provider == "openai_compatible":
+            base_url = self.LLM_OPENAI_COMPATIBLE_BASE_URL
+        return {
+            "provider": provider,
+            "model": model,
+            "base_url": base_url,
+            "timeout": self.LLM_TIMEOUT_SECONDS,
+            "fallback": self.LLM_FALLBACK_ENABLED,
+        }
+
+    def llm_available(self, role: str) -> bool:
+        config = self.llm_config(role)
+        provider = config["provider"]
+        if not config["model"]:
+            return False
+        if provider == "gemini":
+            return bool(self.GOOGLE_API_KEY)
+        if provider == "openai":
+            return bool(self.OPENAI_API_KEY)
+        if provider == "anthropic":
+            return bool(self.ANTHROPIC_API_KEY)
+        return bool(config["base_url"])
 
     # Neo4j
     NEO4J_URI: str

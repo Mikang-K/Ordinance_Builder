@@ -1,4 +1,17 @@
 services:
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["local-llm"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   postgres:
     image: postgres:17-alpine
     environment:
@@ -43,6 +56,8 @@ services:
       NEO4J_URI: bolt://neo4j:7687
       POSTGRES_URL: postgresql://app_user:${POSTGRES_PASSWORD}@postgres:5432/ordinance_builder
       FIREBASE_CREDENTIALS_PATH: /app/firebase-service-account.json
+      LLM_OLLAMA_BASE_URL: ${LLM_OLLAMA_BASE_URL:-http://ollama:11434}
+      LLM_OPENAI_COMPATIBLE_BASE_URL: ${LLM_OPENAI_COMPATIBLE_BASE_URL:-http://ollama:11434/v1}
     volumes:
       - ./firebase-service-account.json:/app/firebase-service-account.json:ro
     depends_on:
@@ -66,6 +81,7 @@ services:
       - backend
 
 volumes:
+  ollama_data:
   postgres_data:
   neo4j_data:
   neo4j_logs:

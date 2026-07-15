@@ -1,5 +1,8 @@
 # Environment variables
 .env
+.env.development
+.env.production
+.env.*
 
 # Python
 __pycache__/

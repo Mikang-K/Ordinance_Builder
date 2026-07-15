@@ -3,6 +3,20 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
+class ModelStatusItem(BaseModel):
+    role: str
+    provider: str
+    model: str
+    deployment: Literal["local", "cloud"]
+    status: Literal["available", "unavailable"]
+    detail: Optional[str] = None
+
+
+class ModelStatusResponse(BaseModel):
+    status: Literal["available", "degraded", "unavailable"]
+    models: list[ModelStatusItem]
+
+
 class MessageRecord(BaseModel):
     role: str   # "user" | "ai"
     text: str
