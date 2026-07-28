@@ -49,10 +49,12 @@ export default function SessionListScreen({ onSelectSession, onNewSession, onTut
 
   const handleDelete = async (sessionId: string, title: string) => {
     if (!window.confirm(`"${title}" 세션을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`)) return
+    setError(null)
     setDeletingId(sessionId)
     try {
       await deleteSession(sessionId)
       setSessions((prev) => prev.filter((s) => s.session_id !== sessionId))
+      setError(null)
     } catch {
       setError('세션 삭제에 실패했습니다. 다시 시도해 주세요.')
     } finally {
@@ -61,59 +63,61 @@ export default function SessionListScreen({ onSelectSession, onNewSession, onTut
   }
 
   return (
-    <div className="session-list-screen">
-      <div className="session-list-hero">
+    <main className="session-list-screen">
+      <section className="session-list-hero" aria-labelledby="session-list-title">
         {user && onLogout && (
           <div className="session-list-user">
             {user.photoURL && (
-              <img src={user.photoURL} alt="프로필" className="session-list-avatar" referrerPolicy="no-referrer" />
+              <img src={user.photoURL} alt="" className="session-list-avatar" referrerPolicy="no-referrer" />
             )}
             <span className="session-list-username">
               {user.displayName || user.email}
             </span>
-            <button className="session-list-logout-btn" onClick={onLogout}>
+            <button type="button" className="session-list-logout-btn" onClick={onLogout}>
               로그아웃
             </button>
           </div>
         )}
-        <div className="session-hero-eyebrow"><span>AI LEGISLATIVE WORKBENCH</span><span className="session-hero-rule" /></div>
-        <h1 className="session-list-title">근거에서 조문까지,<br /><span>신뢰할 수 있는 조례 설계</span></h1>
+        <p className="session-hero-eyebrow">AI LEGISLATIVE WORKBENCH</p>
+        <h1 id="session-list-title" className="session-list-title">근거에서 조문까지,<br /><span>신뢰할 수 있는 조례 설계</span></h1>
         <p className="session-list-subtitle">법령 근거와 유사 조례를 바탕으로 초안 작성부터 법률 검토까지 지원합니다.</p>
         <div className="session-hero-actions">
-          <button id="btn-new-session" className="new-session-btn" onClick={onNewSession}>
+          <button type="button" id="btn-new-session" className="new-session-btn" onClick={onNewSession}>
             <span aria-hidden="true">＋</span> 새 조례 설계 시작
           </button>
           {onTutorial && (
-            <button onClick={onTutorial} className="session-tutorial-btn">
+            <button type="button" onClick={onTutorial} className="session-tutorial-btn">
               사용 안내 <span aria-hidden="true">→</span>
             </button>
           )}
         </div>
-        <div className="session-workflow" aria-label="조례 설계 절차">
+        <ol className="session-workflow" aria-label="조례 설계 절차">
           {['기본정보', '근거 탐색', '조문 설계', '법률 검토', '초안 확정'].map((label, index) => (
-            <div className="session-workflow-step" key={label}>
+            <li className="session-workflow-step" key={label}>
               <span>{String(index + 1).padStart(2, '0')}</span>
               <strong>{label}</strong>
-            </div>
+            </li>
           ))}
-        </div>
-      </div>
+        </ol>
+      </section>
 
-      <div className="session-list-body">
+      <section className="session-list-body" aria-labelledby="workspace-heading">
         <div className="session-body-heading">
           <div>
             <span className="session-section-kicker">WORKSPACE</span>
-            <h2>조례 설계 작업함</h2>
+            <h2 id="workspace-heading">조례 설계 작업함</h2>
             <p>진행 중인 업무를 이어가거나 새로운 조례 설계를 시작하세요.</p>
           </div>
-          <div className="session-trust-mark"><span>✓</span><div><strong>근거 중심 설계</strong><small>법령 · 유사 조례 연계</small></div></div>
+          <div className="session-trust-mark" aria-label="법령과 유사 조례를 연계한 근거 중심 설계">
+            <span aria-hidden="true">✓</span><div><strong>근거 중심 설계</strong><small>법령 · 유사 조례 연계</small></div>
+          </div>
         </div>
         {isLoading && (
-          <p className="session-list-empty">불러오는 중...</p>
+          <p className="session-list-empty" role="status">불러오는 중...</p>
         )}
 
         {error && (
-          <p className="session-list-error">{error}</p>
+          <p className="session-list-error" role="alert">{error}</p>
         )}
 
         {!isLoading && !error && sessions.length === 0 && (
@@ -123,8 +127,8 @@ export default function SessionListScreen({ onSelectSession, onNewSession, onTut
         )}
 
         {sessions.length > 0 && (
-          <>
-            <h2 className="session-list-section-title">최근 작업 <span>{sessions.length}</span></h2>
+          <div className="session-recent-work">
+            <h3 className="session-list-section-title">최근 작업 <span aria-label={`${sessions.length}개`}>{sessions.length}</span></h3>
             <ul className="session-list">
               {sessions.map((s) => (
                 <li key={s.session_id} className="session-card">
@@ -139,17 +143,20 @@ export default function SessionListScreen({ onSelectSession, onNewSession, onTut
                   </div>
                   <div className="session-card-actions">
                     <button
+                      type="button"
                       className="session-resume-btn"
                       onClick={() => onSelectSession(s.session_id)}
                       disabled={deletingId === s.session_id}
+                      aria-label={`${s.title} 계속 작성`}
                     >
                       계속 작성
                     </button>
                     <button
+                      type="button"
                       className="session-delete-btn"
                       onClick={() => handleDelete(s.session_id, s.title)}
                       disabled={deletingId === s.session_id}
-                      aria-label="세션 삭제"
+                      aria-label={`${s.title} 세션 삭제`}
                     >
                       {deletingId === s.session_id ? '삭제 중…' : '삭제'}
                     </button>
@@ -157,9 +164,9 @@ export default function SessionListScreen({ onSelectSession, onNewSession, onTut
                 </li>
               ))}
             </ul>
-          </>
+          </div>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   )
 }

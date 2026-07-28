@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import type { SimilarOrdinance } from '../types'
+import type { EvidenceApplyRequest, SimilarOrdinance } from '../types'
 import { ARTICLE_STRUCTURED_OPTIONS, formatSelectionAsText } from '../constants/interviewOptions'
+import EvidenceApplyDialog, { type EvidenceApplyMode } from './evidence/EvidenceApplyDialog'
 
 interface Props {
   articles: string[]
@@ -10,9 +11,12 @@ interface Props {
   fontSize: number
   onFontSizeChange: (size: number) => void
   similarOrdinances?: SimilarOrdinance[]
-  pendingQAContent?: string | null
-  onQAContentApplied?: () => void
+  pendingApplication?: EvidenceApplyRequest | null
+  onApplicationApplied?: (request: EvidenceApplyRequest) => void
+  onApplicationCancelled?: () => void
+  onCurrentArticleChange?: (articleKey: string | null) => void
   onOpenQA?: () => void
+  embedded?: boolean
 }
 
 const ARTICLE_GUIDES: Record<string, { title: string; hint: string; example?: string }> = {
@@ -67,14 +71,23 @@ export default function ArticleItemsModal({
   fontSize,
   onFontSizeChange,
   similarOrdinances = [],
-  pendingQAContent,
-  onQAContentApplied,
+  pendingApplication,
+  onApplicationApplied,
+  onApplicationCancelled,
+  onCurrentArticleChange,
   onOpenQA,
+  embedded = false,
 }: Props) {
   // values: null means "AI default". string means "User Input". undefined means "not evaluated yet".
   const [values, setValues] = useState<Record<string, string | null>>({})
   const [currentIndex, setCurrentIndex] = useState(0)
   const [structuredSelections, setStructuredSelections] = useState<Record<string, Record<string, string | string[]>>>({})
+  const [applyMode, setApplyMode] = useState<EvidenceApplyMode>('replace')
+  const [applyPreview, setApplyPreview] = useState('')
+  const [applyPreviousValue, setApplyPreviousValue] = useState<string | null | undefined>()
+  const [applyDuplicate, setApplyDuplicate] = useState(false)
+  const [undoValue, setUndoValue] = useState<{ key: string; value: string | null | undefined } | null>(null)
+  const [applicationStatus, setApplicationStatus] = useState('')
 
   // Specifically for the "정의" article
   const [definitions, setDefinitions] = useState<{ term: string; desc: string }[]>([{ term: '', desc: '' }])
@@ -114,20 +127,28 @@ export default function ArticleItemsModal({
 
   // Pre-fill from QA panel "apply" action — no confirm needed (user clicked intentionally)
   useEffect(() => {
-    if (!pendingQAContent) return
+    if (!pendingApplication) return
     const currentKey = articles[currentIndex]
     if (!currentKey) {
-      onQAContentApplied?.()
+      onApplicationCancelled?.()
       return
     }
     if (currentKey === '정의') {
-      setDefinitions([{ term: '', desc: pendingQAContent }])
-      onQAContentApplied?.()
-      return
     }
-    setValues((prev) => ({ ...prev, [currentKey]: pendingQAContent }))
-    onQAContentApplied?.()
-  }, [pendingQAContent, currentIndex, articles, onQAContentApplied])
+    const existing = values[currentKey] ?? ''
+    const incoming = pendingApplication.content.trim()
+    const normalize = (value: string) => value.replace(/\s+/g, ' ').trim().toLocaleLowerCase()
+    const oldText = normalize(existing)
+    const newText = normalize(incoming)
+    setApplyPreviousValue(values[currentKey])
+    setApplyDuplicate(Boolean(oldText && newText) && (oldText.includes(newText) || newText.includes(oldText)))
+    setApplyMode(existing.trim() ? 'append' : 'replace')
+    setApplyPreview(existing.trim() ? `${existing.trim()}\n\n${incoming}` : incoming)
+  }, [pendingApplication]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    onCurrentArticleChange?.(articles[currentIndex] ?? null)
+  }, [articles, currentIndex, onCurrentArticleChange])
 
   const handleAllDefaults = () => {
     if (window.confirm("입력하지 않은 나머지 모든 항목을 '기본값(AI 자동 작성)'으로 넘기고 조례 초안을 생성하시겠습니까?")) {
@@ -218,6 +239,37 @@ export default function ArticleItemsModal({
     return combined || null
   }
 
+  const handleApplyModeChange = (mode: EvidenceApplyMode) => {
+    if (!pendingApplication) return
+    const key = articles[currentIndex]
+    const existing = values[key] ?? ''
+    setApplyMode(mode)
+    setApplyPreview(mode === 'append'
+      ? [existing.trim(), pendingApplication.content.trim()].filter(Boolean).join('\n\n')
+      : pendingApplication.content.trim())
+  }
+
+  const handleApplyConfirm = () => {
+    if (!pendingApplication) return
+    const key = articles[currentIndex]
+    setUndoValue({ key, value: applyPreviousValue })
+    setValues((previous) => ({ ...previous, [key]: applyPreview }))
+    setStructuredSelections((previous) => {
+      const next = { ...previous }
+      delete next[key]
+      return next
+    })
+    setApplicationStatus(`${key}에 근거를 적용했습니다.`)
+    onApplicationApplied?.(pendingApplication)
+  }
+
+  const handleApplyUndo = () => {
+    if (!undoValue) return
+    setValues((previous) => ({ ...previous, [undoValue.key]: undoValue.value ?? '' }))
+    setApplicationStatus(`${undoValue.key} 적용을 되돌렸습니다.`)
+    setUndoValue(null)
+  }
+
   if (articles.length === 0) return null
   const currentKey = articles[currentIndex]
   const val = values[currentKey]
@@ -226,14 +278,14 @@ export default function ArticleItemsModal({
 
   return (
     <div 
-      className="draft-modal-backdrop" 
-      onClick={handleBackdropClick} 
+      className={embedded ? 'workspace-embedded-editor' : 'draft-modal-backdrop'}
+      onClick={embedded ? undefined : handleBackdropClick}
       style={{ justifyContent: 'center', alignItems: 'center' }}
     >
       <div 
-        className="draft-modal article-items-modal" 
-        role="dialog"
-        aria-modal="true"
+        className={`draft-modal article-items-modal${embedded ? ' article-items-modal-embedded' : ''}`}
+        role={embedded ? 'region' : 'dialog'}
+        aria-modal={embedded ? undefined : true}
         aria-labelledby="article-items-title"
         style={{ 
           maxWidth: '1200px', 
@@ -287,9 +339,11 @@ export default function ArticleItemsModal({
                 aria-label="폰트 크기"
               />
             </div>
-            <button className="draft-modal-close" onClick={onClose} aria-label="닫기">
-              ✕
-            </button>
+            {!embedded && (
+              <button className="draft-modal-close" onClick={onClose} aria-label="닫기">
+                ✕
+              </button>
+            )}
           </div>
         </div>
 
@@ -377,6 +431,12 @@ export default function ArticleItemsModal({
 
           {/* Right Panel: Content Form */}
           <div className="article-items-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
+            {applicationStatus && (
+              <div className="evidence-application-status" role="status">
+                <span>{applicationStatus}</span>
+                {undoValue && <button type="button" onClick={handleApplyUndo}>되돌리기</button>}
+              </div>
+            )}
             <div className="article-items-container" style={{ padding: '24px 32px', flex: 1, overflowY: 'auto' }}>
               
               <div className="article-items-form-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -525,7 +585,19 @@ export default function ArticleItemsModal({
             </div>
           </div>
         </div>
-
+        {pendingApplication && applyPreview && (
+          <EvidenceApplyDialog
+            articleKey={articles[currentIndex]}
+            sourceTitle={pendingApplication.title}
+            mode={applyMode}
+            preview={applyPreview}
+            isDuplicate={applyDuplicate}
+            onModeChange={handleApplyModeChange}
+            onPreviewChange={setApplyPreview}
+            onCancel={onApplicationCancelled ?? (() => undefined)}
+            onConfirm={handleApplyConfirm}
+          />
+        )}
       </div>
     </div>
   )

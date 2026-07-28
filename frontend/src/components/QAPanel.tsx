@@ -1,6 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react'
-import type { QAMessage, QASource, Stage } from '../types'
-import { askQuestion, searchDirectQuestion } from '../api'
+import { useEffect, useId, useRef, useState } from 'react'
+import type { EvidenceApplyRequest, EvidenceItem, QAMessage, QASource, Stage } from '../types'
+import {
+  askQuestion,
+  createEvidence,
+  deleteEvidence,
+  listEvidence,
+  searchDirectQuestion,
+} from '../api'
+import EvidencePanel from './evidence/EvidencePanel'
 
 interface Props {
   sessionId: string | null
@@ -8,344 +15,372 @@ interface Props {
   currentArticleKey: string | null
   qaHistory: QAMessage[]
   onAddMessages: (messages: QAMessage[]) => void
-  onApplyContent: (content: string) => void
+  onApplyContent: (request: Omit<EvidenceApplyRequest, 'requestId'>) => void
   onNewSession?: () => void
   fontSize: number
+  evidenceRefreshKey?: number
 }
 
-const RELATION_TYPE_BADGE: Record<string, { label: string; color: string; bg: string }> = {
-  DELEGATES: { label: '위임', color: '#1d4ed8', bg: '#dbeafe' },
-  BASED_ON:  { label: '근거', color: '#15803d', bg: '#dcfce7' },
-  KEYWORD:   { label: '키워드', color: '#6b7280', bg: '#f3f4f6' },
-  VECTOR:    { label: '유사', color: '#6b7280', bg: '#f3f4f6' },
+const relationLabels: Record<string, string> = {
+  DELEGATES: '위임',
+  BASED_ON: '근거',
+  KEYWORD: '키워드',
+  VECTOR: '유사',
 }
 
-function SourceBadge({ relationType }: { relationType: string }) {
-  const badge = RELATION_TYPE_BADGE[relationType] ?? RELATION_TYPE_BADGE['KEYWORD']
-  return (
-    <span style={{
-      fontSize: '0.7rem', fontWeight: 700, padding: '2px 7px', borderRadius: '10px',
-      color: badge.color, background: badge.bg, flexShrink: 0,
-    }}>
-      {badge.label}
-    </span>
-  )
+function evidenceKey(source: QASource): string {
+  return [source.source_type, source.title, source.article_no, source.content].join('\u001f')
 }
 
-function SourceItem({ source }: { source: QASource }) {
+function SourceItem({
+  source,
+  canSave,
+  isSaved,
+  isSaving,
+  onSave,
+}: {
+  source: QASource
+  canSave: boolean
+  isSaved: boolean
+  isSaving: boolean
+  onSave: () => void
+}) {
   const [expanded, setExpanded] = useState(false)
+  const contentId = useId()
   return (
-    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
-      <button
-        onClick={() => setExpanded(e => !e)}
-        style={{
-          width: '100%', textAlign: 'left', padding: '7px 10px', background: 'none',
-          border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-        }}
-      >
-        <SourceBadge relationType={source.relation_type} />
-        <span style={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {source.title}
-        </span>
-        <span style={{ fontSize: '0.75rem', color: '#64748b', flexShrink: 0 }}>{source.article_no}</span>
-        <span style={{ fontSize: '0.7rem', color: '#64748b', flexShrink: 0 }}>{expanded ? '▲' : '▼'}</span>
-      </button>
-      {expanded && (
-        <div style={{ padding: '0 10px 10px', fontSize: '0.78rem', color: '#374151', lineHeight: '1.6', borderTop: '1px solid #e2e8f0', background: '#ffffff' }}>
-          {source.content}
-        </div>
-      )}
+    <div className="qa-source-item">
+      <div className="qa-source-heading">
+        <button
+          type="button"
+          className="qa-source-toggle"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          aria-controls={contentId}
+        >
+          <span className="qa-source-relation">{relationLabels[source.relation_type] ?? '근거'}</span>
+          <span className="qa-source-title">{source.title}</span>
+          <span className="qa-source-article">{source.article_no}</span>
+          <span aria-hidden="true">{expanded ? '−' : '+'}</span>
+        </button>
+        <button
+          type="button"
+          className="qa-source-save"
+          disabled={!canSave || isSaved || isSaving}
+          onClick={onSave}
+          title={!canSave ? '세션을 시작한 뒤 저장할 수 있습니다.' : undefined}
+        >
+          {isSaved ? '저장됨' : isSaving ? '저장 중…' : '근거 저장'}
+        </button>
+      </div>
+      {expanded && <p id={contentId} className="qa-source-content">{source.content}</p>}
     </div>
   )
 }
 
-// Renders **bold**, *italic*, and paragraph/list structure
-function renderMarkdown(text: string): React.ReactNode {
-  const lines = text.split('\n')
-  const nodes: React.ReactNode[] = []
-  let keyIdx = 0
-
-  const renderInline = (line: string): React.ReactNode => {
-    const parts: React.ReactNode[] = []
-    const re = /(\*\*(.+?)\*\*|\*(.+?)\*)/g
-    let last = 0, m: RegExpExecArray | null
-    while ((m = re.exec(line)) !== null) {
-      if (m.index > last) parts.push(line.slice(last, m.index))
-      if (m[2] !== undefined) parts.push(<strong key={keyIdx++}>{m[2]}</strong>)
-      else if (m[3] !== undefined) parts.push(<em key={keyIdx++}>{m[3]}</em>)
-      last = m.index + m[0].length
-    }
-    if (last < line.length) parts.push(line.slice(last))
-    return parts
-  }
-
-  let i = 0
-  while (i < lines.length) {
-    const line = lines[i]
-    const trimmed = line.trim()
-
-    if (!trimmed) { nodes.push(<div key={keyIdx++} style={{ height: '0.4em' }} />); i++; continue }
-
-    // Heading: ## or ###
-    if (/^#{1,3} /.test(trimmed)) {
-      const level = (trimmed.match(/^#+/)![0].length)
-      const content = trimmed.replace(/^#+\s*/, '')
-      const fs = level === 1 ? '1rem' : level === 2 ? '0.92rem' : '0.87rem'
-      nodes.push(
-        <div key={keyIdx++} style={{ fontWeight: 700, fontSize: fs, color: '#1e293b', marginTop: '8px', marginBottom: '2px', borderBottom: level <= 2 ? '1px solid #e2e8f0' : undefined, paddingBottom: level <= 2 ? '3px' : undefined }}>
-          {renderInline(content)}
-        </div>
-      )
-      i++; continue
-    }
-
-    // Bullet list block
-    if (/^[-•*] /.test(trimmed)) {
-      const items: React.ReactNode[] = []
-      while (i < lines.length && /^[-•*] /.test(lines[i].trim())) {
-        items.push(<li key={keyIdx++} style={{ marginBottom: '3px' }}>{renderInline(lines[i].trim().slice(2))}</li>)
-        i++
-      }
-      nodes.push(<ul key={keyIdx++} style={{ margin: '4px 0', paddingLeft: '18px', lineHeight: 1.65 }}>{items}</ul>)
-      continue
-    }
-
-    // Numbered list block
-    if (/^\d+[.)]\s/.test(trimmed)) {
-      const items: React.ReactNode[] = []
-      while (i < lines.length && /^\d+[.)]\s/.test(lines[i].trim())) {
-        items.push(<li key={keyIdx++} style={{ marginBottom: '3px' }}>{renderInline(lines[i].trim().replace(/^\d+[.)]\s*/, ''))}</li>)
-        i++
-      }
-      nodes.push(<ol key={keyIdx++} style={{ margin: '4px 0', paddingLeft: '20px', lineHeight: 1.65 }}>{items}</ol>)
-      continue
-    }
-
-    nodes.push(<p key={keyIdx++} style={{ margin: '0 0 4px' }}>{renderInline(line)}</p>)
-    i++
-  }
-
-  return <>{nodes}</>
-}
-
-function QAMessageBubble({
-  msg, currentArticleKey, stage, onApply,
+function MessageBubble({
+  message,
+  stage,
+  currentArticleKey,
+  evidence,
+  savingKey,
+  onSaveSource,
+  onApply,
 }: {
-  msg: QAMessage
-  currentArticleKey: string | null
+  message: QAMessage
   stage: Stage | null
-  onApply: (content: string) => void
+  currentArticleKey: string | null
+  evidence: EvidenceItem[]
+  savingKey: string | null
+  onSaveSource: (source: QASource) => void
+  onApply: (request: Omit<EvidenceApplyRequest, 'requestId'>) => void
 }) {
-  const isUser = msg.role === 'user'
-  const canApply = !isUser
-    && stage === 'article_interviewing'
-    && msg.applicable_content
-    && msg.applicable_article_key === currentArticleKey
+  const isUser = message.role === 'user'
+  const applyContent = message.applicable_content?.trim() || message.text.trim()
+  const canApply = !isUser && stage === 'article_interviewing' && Boolean(currentArticleKey && applyContent)
 
   return (
-    <div className="qa-message-row" style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
-      <div className="qa-message-bubble" style={{
-        maxWidth: '88%',
-        padding: '10px 13px',
-        borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-        background: isUser ? '#1e40af' : '#ffffff',
-        color: isUser ? '#ffffff' : '#1e293b',
-        border: isUser ? 'none' : '1px solid #e2e8f0',
-        fontSize: '0.88rem',
-        lineHeight: '1.6',
-        wordBreak: 'break-word',
-      }}>
-        {isUser ? msg.text : renderMarkdown(msg.text)}
-      </div>
-
-      {!isUser && msg.sources && msg.sources.length > 0 && (
-        <div className="qa-source-list" style={{ maxWidth: '88%', width: '100%', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ fontSize: '0.72rem', color: '#64748b', paddingLeft: '2px' }}>📋 법령 근거</span>
-          {msg.sources.map((s, i) => <SourceItem key={i} source={s} />)}
+    <article className={`qa-message-row ${isUser ? 'is-user' : 'is-assistant'}`} aria-label={isUser ? '내 질문' : 'AI 답변'}>
+      <div className="qa-message-bubble">{message.text}</div>
+      {!isUser && message.sources && message.sources.length > 0 && (
+        <div className="qa-source-list">
+          <span className="qa-source-list-label">법령 근거</span>
+          {message.sources.map((source, index) => {
+            const key = evidenceKey(source)
+            return (
+              <SourceItem
+                key={`${key}-${index}`}
+                source={source}
+                canSave={Boolean(currentArticleKey)}
+                isSaved={evidence.some((item) => evidenceKey(item as QASource) === key)}
+                isSaving={savingKey === key}
+                onSave={() => onSaveSource(source)}
+              />
+            )
+          })}
         </div>
       )}
-
-      {canApply && msg.applicable_content && (
+      {canApply && currentArticleKey && (
         <button
-          onClick={() => onApply(msg.applicable_content!)}
+          type="button"
           className="qa-apply-btn"
-          style={{
-            alignSelf: 'flex-start',
-            padding: '6px 14px',
-            background: '#0f766e',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '0.8rem',
-            fontWeight: 600,
-          }}
+          onClick={() => onApply({
+            content: applyContent,
+            title: 'Q&A 현재 답변',
+            targetArticleKey: currentArticleKey,
+          })}
         >
-          ↩ 현재 조항에 적용하기
+          현재 답변을 {currentArticleKey}에 적용
         </button>
       )}
-    </div>
+    </article>
   )
 }
 
 export default function QAPanel({
-  sessionId, stage, currentArticleKey,
-  qaHistory, onAddMessages, onApplyContent, onNewSession, fontSize,
+  sessionId,
+  stage,
+  currentArticleKey,
+  qaHistory,
+  onAddMessages,
+  onApplyContent,
+  onNewSession,
+  fontSize,
+  evidenceRefreshKey = 0,
 }: Props) {
+  const [activeTab, setActiveTab] = useState<'qa' | 'evidence'>('qa')
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [evidence, setEvidence] = useState<EvidenceItem[]>([])
+  const [evidenceLoading, setEvidenceLoading] = useState(false)
+  const [evidenceError, setEvidenceError] = useState<string | null>(null)
+  const [evidenceLoadVersion, setEvidenceLoadVersion] = useState(0)
+  const [savingKey, setSavingKey] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [status, setStatus] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+  const qaScopeRef = useRef({ sessionId, version: 0 })
+  const evidenceScopeRef = useRef(0)
+
+  if (qaScopeRef.current.sessionId !== sessionId) {
+    qaScopeRef.current = { sessionId, version: qaScopeRef.current.version + 1 }
+  }
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setIsLoading(false)
+    setSavingKey(null)
+    setDeletingId(null)
+    setActiveTab('qa')
+    return () => {
+      qaScopeRef.current.version += 1
+    }
+  }, [sessionId])
+
+  useEffect(() => {
+    const version = ++evidenceScopeRef.current
+    setEvidence([])
+    setEvidenceError(null)
+    if (!sessionId) {
+      setEvidenceLoading(false)
+      return
+    }
+    setEvidenceLoading(true)
+    void listEvidence(sessionId)
+      .then((items) => {
+        if (evidenceScopeRef.current === version) setEvidence(items)
+      })
+      .catch((error: unknown) => {
+        if (evidenceScopeRef.current === version) {
+          setEvidenceError(error instanceof Error ? error.message : '근거 목록을 불러오지 못했습니다.')
+        }
+      })
+      .finally(() => {
+        if (evidenceScopeRef.current === version) setEvidenceLoading(false)
+      })
+  }, [sessionId, evidenceLoadVersion, evidenceRefreshKey])
+
+  useEffect(() => {
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' })
   }, [qaHistory])
 
   const handleSend = async () => {
-    const q = input.trim()
-    if (!q || isLoading) return
+    const question = input.trim()
+    if (!question || isLoading) return
+    const requestVersion = ++qaScopeRef.current.version
+    const requestSessionId = sessionId
+    const isCurrent = () => qaScopeRef.current.version === requestVersion
+      && qaScopeRef.current.sessionId === requestSessionId
+
     setInput('')
     setIsLoading(true)
-
-    const userMsg: QAMessage = { role: 'user', text: q }
-    onAddMessages([userMsg])
-
+    onAddMessages([{ role: 'user', text: question }])
     try {
-      let res
-      if (sessionId) {
-        try {
-          res = await askQuestion(sessionId, q)
-        } catch {
-          res = await searchDirectQuestion(q, { current_article_key: currentArticleKey })
-        }
-      } else {
-        res = await searchDirectQuestion(q, { current_article_key: currentArticleKey })
-      }
-      const aiMsg: QAMessage = {
+      const response = requestSessionId
+        ? await askQuestion(requestSessionId, question)
+        : await searchDirectQuestion(question, { current_article_key: currentArticleKey })
+      if (!isCurrent()) return
+      onAddMessages([{
         role: 'ai',
-        text: res.answer,
-        sources: res.sources,
-        applicable_content: res.applicable_content,
-        applicable_article_key: res.applicable_article_key,
-      }
-      onAddMessages([aiMsg])
-    } catch (e) {
-      onAddMessages([{ role: 'ai', text: `오류가 발생했습니다: ${e instanceof Error ? e.message : '알 수 없는 오류'}` }])
+        text: response.answer,
+        sources: response.sources,
+        applicable_content: response.applicable_content,
+        applicable_article_key: response.applicable_article_key,
+      }])
+    } catch (error) {
+      if (!isCurrent()) return
+      onAddMessages([{ role: 'ai', text: `오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}` }])
     } finally {
-      setIsLoading(false)
+      if (isCurrent()) setIsLoading(false)
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+  const handleSaveSource = async (source: QASource) => {
+    if (!sessionId || savingKey) return
+    const requestSessionId = sessionId
+    const version = evidenceScopeRef.current
+    const key = evidenceKey(source)
+    setSavingKey(key)
+    setEvidenceError(null)
+    try {
+      const saved = await createEvidence(requestSessionId, {
+        source_type: source.source_type,
+        title: source.title,
+        article_no: source.article_no,
+        content: source.content,
+        relation_type: source.relation_type,
+        target_article_key: currentArticleKey,
+      })
+      if (evidenceScopeRef.current !== version || sessionId !== requestSessionId) return
+      setEvidence((items) => items.some((item) => item.id === saved.id) ? items : [saved, ...items])
+      setStatus(`${source.title} 근거를 저장했습니다.`)
+    } catch (error) {
+      if (evidenceScopeRef.current === version) {
+        setEvidenceError(error instanceof Error ? error.message : '근거를 저장하지 못했습니다.')
+      }
+    } finally {
+      if (evidenceScopeRef.current === version) setSavingKey(null)
+    }
+  }
+
+  const handleDelete = async (item: EvidenceItem) => {
+    if (!sessionId || deletingId || !window.confirm(`‘${item.title}’ 근거를 삭제하시겠습니까?`)) return
+    const requestSessionId = sessionId
+    const version = evidenceScopeRef.current
+    setDeletingId(item.id)
+    setEvidenceError(null)
+    try {
+      await deleteEvidence(requestSessionId, item.id)
+      if (evidenceScopeRef.current !== version || sessionId !== requestSessionId) return
+      setEvidence((items) => items.filter((candidate) => candidate.id !== item.id))
+      setStatus(`${item.title} 근거를 삭제했습니다.`)
+    } catch (error) {
+      if (evidenceScopeRef.current === version) {
+        setEvidenceError(error instanceof Error ? error.message : '근거를 삭제하지 못했습니다.')
+      }
+    } finally {
+      if (evidenceScopeRef.current === version) setDeletingId(null)
+    }
   }
 
   return (
-    <div className="qa-panel" style={{
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      background: '#ffffff',
-      fontSize: `${fontSize}px`,
-    }}>
-      {/* Header */}
-      <div className="qa-panel-header" style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 18px', borderBottom: '1px solid #e2e8f0',
-        background: '#f8fafc', flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '1rem' }}>🔍</span>
-          <h2 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>법령 Q&amp;A</h2>
-        </div>
-        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{sessionId ? '세션 법령 우선' : '전체 DB 벡터 검색'}</span>
-      </div>
-
-      {/* Message history */}
-      <div className="qa-message-list" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {qaHistory.length === 0 && (
-          <div style={{ margin: 'auto', textAlign: 'center', color: '#64748b', padding: '32px 16px' }}>
-            <p style={{ fontSize: '1.8rem', marginBottom: '12px' }}>⚖️</p>
-            <p style={{ fontSize: '0.9rem', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>법령 기반 Q&amp;A</p>
-            <p style={{ fontSize: '0.82rem', lineHeight: 1.6 }}>
-              {sessionId
-                ? <>세션 생성 시 수집한 법령을 우선 참조하여 답변합니다.<br />해당 조례에 최적화된 법령 근거로 질문하세요.</>
-                : <>질문을 임베딩하여 법령·조례 전체 DB를 벡터 검색합니다.<br />조례 초안 작성을 시작하려면 새 조례를 먼저 만드세요.</>
-              }
-            </p>
-            {!sessionId && onNewSession && (
-              <button
-                className="qa-empty-action"
-                onClick={onNewSession}
-                style={{
-                  marginTop: '16px',
-                  padding: '10px 18px',
-                  border: 'none',
-                  borderRadius: '8px',
-                  background: '#1e40af',
-                  color: '#ffffff',
-                  fontSize: '0.9rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                새 조례 만들기
-              </button>
-            )}
-          </div>
-        )}
-        {qaHistory.map((msg, i) => (
-          <QAMessageBubble
-            key={i}
-            msg={msg}
-            currentArticleKey={currentArticleKey}
-            stage={stage}
-            onApply={onApplyContent}
-          />
-        ))}
-        {isLoading && (
-          <div style={{ display: 'flex', gap: '4px', alignItems: 'center', padding: '10px 14px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', width: 'fit-content' }}>
-            {[0, 200, 400].map((d) => (
-              <span key={d} style={{ width: 7, height: 7, borderRadius: '50%', background: '#64748b', display: 'inline-block', animation: `bounce 1.2s ${d}ms infinite` }} />
-            ))}
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input area */}
-      <div className="qa-input-area" style={{
-        display: 'flex', gap: '8px', padding: '12px 14px',
-        borderTop: '1px solid #e2e8f0', background: 'white', flexShrink: 0,
-        alignItems: 'flex-end',
-      }}>
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="법령·조례에 대해 질문하세요... (Shift+Enter 줄바꿈)"
-          rows={2}
-          disabled={isLoading}
-          className="qa-input"
-          id="qa-input"
-          style={{
-            flex: 1, padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: '8px',
-            resize: 'none', fontSize: '0.88rem', fontFamily: 'inherit', outline: 'none',
-            lineHeight: 1.5,
-          }}
-        />
+    <section className="qa-panel" aria-label="Q&A와 근거 라이브러리" style={{ fontSize: `${fontSize}px` }}>
+      <div className="qa-panel-tabs" role="tablist" aria-label="오른쪽 패널 보기">
         <button
-          onClick={handleSend}
-          disabled={!input.trim() || isLoading}
-          className="qa-send-btn"
-          style={{
-            padding: '9px 16px', background: '#1e40af', color: 'white', border: 'none',
-            borderRadius: '8px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600,
-            whiteSpace: 'nowrap', opacity: (!input.trim() || isLoading) ? 0.5 : 1,
-          }}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'qa'}
+          aria-controls="qa-panel-content"
+          className={activeTab === 'qa' ? 'active' : ''}
+          onClick={() => setActiveTab('qa')}
         >
-          전송
+          Q&amp;A
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'evidence'}
+          aria-controls="evidence-panel-content"
+          className={activeTab === 'evidence' ? 'active' : ''}
+          onClick={() => setActiveTab('evidence')}
+        >
+          근거 <span className="qa-tab-count">{evidence.length}</span>
         </button>
       </div>
-    </div>
+
+      <p className="sr-only" role="status" aria-live="polite">{status}</p>
+
+      {activeTab === 'qa' ? (
+        <>
+          <div
+            id="qa-panel-content"
+            role="tabpanel"
+            className="qa-message-list"
+            aria-live="polite"
+            aria-busy={isLoading}
+          >
+            {qaHistory.length === 0 && (
+              <div className="qa-empty-state">
+                <strong>법령 기반 Q&amp;A</strong>
+                <p>법령과 유사 조례를 검색해 조문 작성에 필요한 근거를 확인하세요.</p>
+                {!sessionId && onNewSession && <button type="button" onClick={onNewSession}>새 조례 만들기</button>}
+              </div>
+            )}
+            {qaHistory.map((message, index) => (
+              <MessageBubble
+                key={index}
+                message={message}
+                stage={stage}
+                currentArticleKey={currentArticleKey}
+                evidence={evidence}
+                savingKey={savingKey}
+                onSaveSource={handleSaveSource}
+                onApply={onApplyContent}
+              />
+            ))}
+            {isLoading && <p role="status" className="qa-loading-status">답변을 작성하는 중입니다…</p>}
+            <div ref={bottomRef} aria-hidden="true" />
+          </div>
+          <form className="qa-input-area" onSubmit={(event) => { event.preventDefault(); void handleSend() }}>
+            <label className="sr-only" htmlFor="qa-input">법령 또는 조례 관련 질문</label>
+            <textarea
+              id="qa-input"
+              className="qa-input"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  void handleSend()
+                }
+              }}
+              placeholder="법령·조례에 관해 질문하세요. (Shift+Enter 줄바꿈)"
+              rows={2}
+              disabled={isLoading}
+            />
+            <button type="submit" className="qa-send-btn" disabled={!input.trim() || isLoading}>전송</button>
+          </form>
+        </>
+      ) : (
+        <div id="evidence-panel-content" role="tabpanel" className="evidence-panel-content">
+          {!sessionId ? (
+            <div className="evidence-panel-state">
+              <strong>세션을 먼저 시작해 주세요.</strong>
+              <p>근거는 현재 조례 작업별로 안전하게 구분해 저장됩니다.</p>
+            </div>
+          ) : (
+            <EvidencePanel
+              items={evidence}
+              currentArticleKey={currentArticleKey}
+              isLoading={evidenceLoading}
+              error={evidenceError}
+              deletingId={deletingId}
+              onRetry={() => setEvidenceLoadVersion((value) => value + 1)}
+              onDelete={(item) => void handleDelete(item)}
+              onApply={onApplyContent}
+            />
+          )}
+        </div>
+      )}
+    </section>
   )
 }

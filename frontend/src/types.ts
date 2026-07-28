@@ -117,6 +117,32 @@ export interface QAResponse {
   applicable_article_key?: string | null
 }
 
+export interface EvidenceItem {
+  id: string
+  source_type: QASource['source_type']
+  title: string
+  article_no: string
+  content: string
+  relation_type?: string | null
+  target_article_key?: string | null
+  applicable_content?: string | null
+  note?: string | null
+  source_message_id?: string | null
+  created_at: string
+  applied_at?: string | null
+}
+
+export type EvidenceCreateInput = Omit<EvidenceItem, 'id' | 'created_at' | 'applied_at'>
+export type EvidenceUpdateInput = Partial<EvidenceCreateInput>
+
+export interface EvidenceApplyRequest {
+  requestId: number
+  content: string
+  title: string
+  targetArticleKey: string
+  evidenceId?: string
+}
+
 export type ModelDeployment = 'local' | 'cloud' | string
 export type ModelAvailability = 'available' | 'degraded' | 'unavailable' | string
 export interface ModelRuntimeStatus { role: string; provider: string; model: string; deployment: ModelDeployment; status: ModelAvailability; detail?: string | null }

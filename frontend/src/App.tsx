@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import type { LegalIssue, QAMessage, SimilarOrdinance, Stage } from './types'
-import { createSession, sendMessage, finalizeSession, getSessionState, submitArticlesBatch } from './api'
+import type { EvidenceApplyRequest, LegalIssue, QAMessage, SimilarOrdinance, Stage } from './types'
+import { createSession, sendMessage, finalizeSession, getSessionState, markEvidenceApplied, submitArticlesBatch } from './api'
 import { auth, loginWithGoogle, logout, onAuthStateChanged, getRedirectResult } from './firebase'
 import type { User } from './firebase'
 import StageIndicator from './components/StageIndicator'
@@ -14,7 +14,59 @@ import OnboardingWizard from './components/OnboardingWizard'
 import TutorialOverlay, { TUTORIAL_STEP_COUNT } from './components/TutorialOverlay'
 import ModelStatus from './components/ModelStatus'
 
+type AppRoute =
+  | { kind: 'list' }
+  | { kind: 'new' }
+  | { kind: 'session'; sessionId: string }
+
+function readRoute(pathname = window.location.pathname): AppRoute {
+  if (pathname === '/' || pathname === '') return { kind: 'list' }
+  if (pathname === '/sessions/new' || pathname === '/sessions/new/') return { kind: 'new' }
+
+  const match = pathname.match(/^\/sessions\/([^/]+)\/?$/)
+  if (match) {
+    try {
+      return { kind: 'session', sessionId: decodeURIComponent(match[1]) }
+    } catch {
+      return { kind: 'list' }
+    }
+  }
+
+  return { kind: 'list' }
+}
+
 export default function App() {
+  const [route, setRoute] = useState<AppRoute>(() => readRoute())
+  const routeRef = useRef<AppRoute>(route)
+  const requestGenerationRef = useRef(0)
+  const sessionLoadIdRef = useRef(0)
+
+  const navigate = useCallback((path: string, options?: { replace?: boolean }) => {
+    const method = options?.replace ? 'replaceState' : 'pushState'
+    window.history[method](null, '', path)
+    const nextRoute = readRoute(path)
+    requestGenerationRef.current += 1
+    routeRef.current = nextRoute
+    setRoute(nextRoute)
+  }, [])
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const nextRoute = readRoute()
+      requestGenerationRef.current += 1
+      routeRef.current = nextRoute
+      setRoute(nextRoute)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  useEffect(() => {
+    if (route.kind === 'list' && window.location.pathname !== '/') {
+      window.history.replaceState(null, '', '/')
+    }
+  }, [route])
+
   // ── 인증 상태 ──────────────────────────────────────────────────────────────
   const [user, setUser] = useState<User | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
@@ -53,11 +105,10 @@ export default function App() {
   const handleLogout = async () => {
     await logout()
     resetState()
-    setView('list')
+    navigate('/', { replace: true })
   }
   // ──────────────────────────────────────────────────────────────────────────
 
-  const [view, setView] = useState<'list' | 'chat'>('list')
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState<string | null>(null)
@@ -84,9 +135,11 @@ export default function App() {
   const [hideArticleModal, setHideArticleModal] = useState(false)
   // QA Panel State
   const [qaHistory, setQaHistory] = useState<QAMessage[]>([])
-  const [pendingQAContent, setPendingQAContent] = useState<string | null>(null)
+  const [pendingApplication, setPendingApplication] = useState<EvidenceApplyRequest | null>(null)
+  const [evidenceRefreshKey, setEvidenceRefreshKey] = useState(0)
   const [hasSession, setHasSession] = useState(false)
   const [ordinanceType, setOrdinanceType] = useState<string | null>(null)
+  const [workspaceTab, setWorkspaceTab] = useState<'articles' | 'draft'>('articles')
 
   // Tutorial state
   const [tutorialStep, setTutorialStep] = useState(-1)   // -1 = inactive, 0~4 = active step
@@ -167,6 +220,7 @@ export default function App() {
       setPendingLegalIssues(null)  // reset issues for new draft
       setIsLegallyValid(null)
       setIsDraftModalOpen(true)
+      setWorkspaceTab('draft')
     }
 
     // Legal check result received → update issues in modal, keep modal open
@@ -175,6 +229,7 @@ export default function App() {
       if (res.legal_issues !== undefined) setPendingLegalIssues(res.legal_issues ?? null)
       setIsLegallyValid(res.is_legally_valid ?? null)
       setIsDraftModalOpen(true)  // ensure modal stays open
+      setWorkspaceTab('draft')
     }
 
     // Workflow fully completed (after /finalize)
@@ -187,17 +242,22 @@ export default function App() {
   }
 
   const handleWizardStart = async (message: string, ordinanceType: string) => {
+    const requestGeneration = requestGenerationRef.current
     setIsOnboardingOpen(false)
     setIsLoading(true)
     setLoadingMessage('기본 정보를 분석하고 있습니다...')
     try {
       const res = await createSession(message, ordinanceType)
+      if (requestGenerationRef.current !== requestGeneration || routeRef.current.kind !== 'new') return
       sessionIdRef.current = res.session_id
       setHasSession(true)
       applyResponse({ ...res, is_complete: false })
+      navigate(`/sessions/${encodeURIComponent(res.session_id)}`, { replace: true })
     } catch (e) {
+      if (requestGenerationRef.current !== requestGeneration || routeRef.current.kind !== 'new') return
       setError(e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.')
     } finally {
+      if (requestGenerationRef.current !== requestGeneration || routeRef.current.kind !== 'new') return
       setIsLoading(false)
       setLoadingMessage(null)
     }
@@ -206,16 +266,25 @@ export default function App() {
   const handleLegalReview = async (editedDraft: string) => {
     if (!sessionIdRef.current || isLoading) return
 
+    const requestGeneration = requestGenerationRef.current
+    const requestSessionId = sessionIdRef.current
     setError(null)
     setIsLoading(true)
     setLoadingMessage('법률 조항을 검증하고 있습니다...')
 
     try {
-      const res = await sendMessage(sessionIdRef.current, '법률 검증을 요청합니다.', editedDraft)
+      const res = await sendMessage(requestSessionId, '법률 검증을 요청합니다.', editedDraft)
+      if (
+        requestGenerationRef.current !== requestGeneration ||
+        routeRef.current.kind !== 'session' ||
+        routeRef.current.sessionId !== requestSessionId
+      ) return
       applyResponse(res)
     } catch (e) {
+      if (requestGenerationRef.current !== requestGeneration) return
       setError(e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.')
     } finally {
+      if (requestGenerationRef.current !== requestGeneration) return
       setIsLoading(false)
       setLoadingMessage(null)
     }
@@ -224,20 +293,29 @@ export default function App() {
   const handleFinalize = async (finalDraft: string) => {
     if (!sessionIdRef.current || isLoading) return
 
+    const requestGeneration = requestGenerationRef.current
+    const requestSessionId = sessionIdRef.current
     setError(null)
     setIsLoading(true)
     setLoadingMessage('조례 초안을 확정하는 중입니다...')
 
     try {
-      const res = await finalizeSession(sessionIdRef.current, finalDraft)
+      const res = await finalizeSession(requestSessionId, finalDraft)
+      if (
+        requestGenerationRef.current !== requestGeneration ||
+        routeRef.current.kind !== 'session' ||
+        routeRef.current.sessionId !== requestSessionId
+      ) return
       setCompletedDraft(res.draft)
       setFinalLegalIssues(res.legal_issues?.length ? res.legal_issues : null)
       setIsDraftModalOpen(false)
       setStage('completed')
       setIsCompletedDraftModalOpen(true)
     } catch (e) {
+      if (requestGenerationRef.current !== requestGeneration) return
       setError(e instanceof Error ? e.message : '확정 중 오류가 발생했습니다.')
     } finally {
+      if (requestGenerationRef.current !== requestGeneration) return
       setIsLoading(false)
       setLoadingMessage(null)
     }
@@ -245,6 +323,8 @@ export default function App() {
 
   const resetState = () => {
     sessionIdRef.current = null
+    setIsLoading(false)
+    setLoadingMessage(null)
     setStage(null)
     setPendingDraft(null)
     setIsDraftModalOpen(false)
@@ -258,7 +338,7 @@ export default function App() {
     setCurrentArticleKey(null)
     setHideArticleModal(false)
     setQaHistory([])
-    setPendingQAContent(null)
+    setPendingApplication(null)
     setHasSession(false)
     setOrdinanceType(null)
     setError(null)
@@ -266,13 +346,11 @@ export default function App() {
 
   const handleReset = () => {
     resetState()
-    setView('list')
+    navigate('/')
   }
 
   const handleNewSession = () => {
-    resetState()
-    setView('chat')
-    setIsOnboardingOpen(true)
+    navigate('/sessions/new')
   }
 
   const handleOpenQAFromArticleModal = () => {
@@ -282,54 +360,87 @@ export default function App() {
     }, 0)
   }
 
-  const handleSelectSession = async (sessionId: string) => {
-    setError(null)
-    try {
-      const state = await getSessionState(sessionId)
-      resetState()
-      sessionIdRef.current = state.session_id
-      setHasSession(true)
-      setStage(state.stage as Stage)
-
-      if (state.similar_ordinances && state.similar_ordinances.length > 0) {
-        setSimilarOrdinances(state.similar_ordinances)
-      }
-      if (state.article_queue != null) setArticleQueue(state.article_queue)
-      if (state.current_article_key !== undefined) setCurrentArticleKey(state.current_article_key)
-      if (state.ordinance_type != null) setOrdinanceType(state.ordinance_type)
-      if (state.qa_history != null) setQaHistory(state.qa_history)
-
-      if (state.stage === 'completed') {
-        if (state.draft) setCompletedDraft(state.draft)
-        if (state.legal_issues && state.legal_issues.length > 0) {
-          setFinalLegalIssues(state.legal_issues)
-        }
-        setIsCompletedDraftModalOpen(true)
-      } else if (state.draft) {
-        setPendingDraft(state.draft)
-        if (state.legal_issues) setPendingLegalIssues(state.legal_issues)
-        if (state.stage === 'draft_review' || state.stage === 'legal_checking') {
-          setIsDraftModalOpen(true)
-        }
-      }
-
-      setView('chat')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '세션을 불러오지 못했습니다.')
-    }
+  const handleSelectSession = (sessionId: string) => {
+    navigate(`/sessions/${encodeURIComponent(sessionId)}`)
   }
+
+  useEffect(() => {
+    if (!user) return
+
+    const loadId = ++sessionLoadIdRef.current
+    if (route.kind === 'list') {
+      resetState()
+      setIsOnboardingOpen(false)
+      return
+    }
+    if (route.kind === 'new') {
+      resetState()
+      setIsOnboardingOpen(true)
+      return
+    }
+
+    resetState()
+    setIsOnboardingOpen(false)
+    setIsLoading(true)
+    setLoadingMessage('작업 내용을 불러오고 있습니다...')
+
+    getSessionState(route.sessionId)
+      .then((state) => {
+        if (sessionLoadIdRef.current !== loadId) return
+        sessionIdRef.current = state.session_id
+        setHasSession(true)
+        setStage(state.stage as Stage)
+
+        if (state.similar_ordinances?.length) setSimilarOrdinances(state.similar_ordinances)
+        if (state.article_queue != null) setArticleQueue(state.article_queue)
+        if (state.current_article_key !== undefined) setCurrentArticleKey(state.current_article_key)
+        if (state.ordinance_type != null) setOrdinanceType(state.ordinance_type)
+        if (state.qa_history != null) setQaHistory(state.qa_history)
+
+        if (state.stage === 'completed') {
+          if (state.draft) setCompletedDraft(state.draft)
+          if (state.legal_issues?.length) setFinalLegalIssues(state.legal_issues)
+          setIsCompletedDraftModalOpen(true)
+        } else if (state.draft) {
+          setPendingDraft(state.draft)
+          if (state.legal_issues) setPendingLegalIssues(state.legal_issues)
+          if (state.stage === 'draft_review' || state.stage === 'legal_checking') {
+            setIsDraftModalOpen(true)
+            setWorkspaceTab('draft')
+          }
+        }
+      })
+      .catch((e) => {
+        if (sessionLoadIdRef.current !== loadId) return
+        setError(e instanceof Error ? e.message : '세션을 불러오지 못했습니다.')
+      })
+      .finally(() => {
+        if (sessionLoadIdRef.current !== loadId) return
+        setIsLoading(false)
+        setLoadingMessage(null)
+      })
+  }, [route, user])
 
   const handleArticlesSubmit = async (articles: Record<string, string | null>) => {
     if (!sessionIdRef.current || isLoading) return
+    const requestGeneration = requestGenerationRef.current
+    const requestSessionId = sessionIdRef.current
     setError(null)
     setIsLoading(true)
     setLoadingMessage('조례 초안을 생성하고 있습니다...')
     try {
-      const res = await submitArticlesBatch(sessionIdRef.current, articles)
+      const res = await submitArticlesBatch(requestSessionId, articles)
+      if (
+        requestGenerationRef.current !== requestGeneration ||
+        routeRef.current.kind !== 'session' ||
+        routeRef.current.sessionId !== requestSessionId
+      ) return
       applyResponse(res)
     } catch (e) {
+      if (requestGenerationRef.current !== requestGeneration) return
       setError(e instanceof Error ? e.message : '항목 전송에 실패했습니다.')
     } finally {
+      if (requestGenerationRef.current !== requestGeneration) return
       setIsLoading(false)
       setLoadingMessage(null)
     }
@@ -340,13 +451,33 @@ export default function App() {
     [currentArticleKey, articleQueue]
   )
   const isArticleModalOpen = stage === 'article_interviewing' && mappedArticles.length > 0
-  const handleQAContentApplied = useCallback(() => setPendingQAContent(null), [])
+  const handleApplicationApplied = useCallback((request: EvidenceApplyRequest) => {
+    setPendingApplication(null)
+    const requestSessionId = sessionIdRef.current
+    const requestGeneration = requestGenerationRef.current
+    if (requestSessionId && request.evidenceId) {
+      const isCurrentSession = () => (
+        requestGenerationRef.current === requestGeneration &&
+        routeRef.current.kind === 'session' &&
+        routeRef.current.sessionId === requestSessionId
+      )
+      void markEvidenceApplied(requestSessionId, request.evidenceId, request.targetArticleKey)
+        .then(() => {
+          if (isCurrentSession()) setEvidenceRefreshKey((value) => value + 1)
+        })
+        .catch(() => {
+          if (isCurrentSession()) {
+            setError('근거 적용 상태를 저장하지 못했습니다. 조문 내용은 유지됩니다.')
+          }
+        })
+    }
+  }, [])
 
   // ── 인증 게이트 ────────────────────────────────────────────────────────────
   if (authLoading) {
     return (
       <div style={loginPageStyle}>
-        <p style={{ color: '#6b7280', fontSize: '1rem' }}>인증 확인 중...</p>
+        <p role="status" style={{ color: '#ffffff', fontSize: '1rem', fontWeight: 600 }}>인증 확인 중...</p>
       </div>
     )
   }
@@ -381,7 +512,7 @@ export default function App() {
   }
   // ──────────────────────────────────────────────────────────────────────────
 
-  if (view === 'list') {
+  if (route.kind === 'list') {
     return (
       <>
         <ModelStatus />
@@ -408,38 +539,36 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-left">
-          <h1 className="app-title">조례 빌더 AI</h1>
-          <span className="app-subtitle">지방 조례 초안 자동 생성 서비스</span>
-          <div className="font-size-slider" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85em', opacity: 0.9 }}>폰트 크기</span>
+          <div className="header-brand">
+            <h1 className="app-title">조례 빌더 AI</h1>
+            <span className="app-subtitle">지방 조례 초안 자동 생성 서비스</span>
+          </div>
+          <div className="ordinance-context" aria-label="현재 조례 작업">
+            <span className="ordinance-context-label">현재 작업</span>
+            <strong>{ordinanceType ? `${ordinanceType} 조례` : '새 조례 설계'}</strong>
+          </div>
+          <div className="font-size-control">
+            <label className="font-size-label" htmlFor="app-font-size">글자 크기</label>
             <input
+              id="app-font-size"
+              className="font-size-range"
               type="range"
               min="12"
               max="24"
               step="0.5"
               value={fontSize}
-              onChange={(e) => setFontSize(Number(e.target.value))}
-              style={{ width: '120px', accentColor: '#ffffff' }}
-              title="폰트 크기"
-              aria-label="폰트 크기"
+              aria-label="본문 글자 크기"
+              aria-valuetext={`${fontSize}px`}
+              onChange={(event) => setFontSize(Number(event.target.value))}
             />
+            <output className="font-size-value" htmlFor="app-font-size" aria-live="polite">
+              {fontSize}px
+            </output>
           </div>
         </div>
-        <StageIndicator stage={stage} />
-        {ordinanceType && (
-          <span className="ordinance-type-badge" style={{
-            padding: '3px 10px',
-            background: 'rgba(255,255,255,0.15)',
-            border: '1px solid rgba(255,255,255,0.3)',
-            borderRadius: '12px',
-            fontSize: '0.78rem',
-            fontWeight: 600,
-            color: '#ffffff',
-            whiteSpace: 'nowrap',
-          }}>
-            {ordinanceType} 조례
-          </span>
-        )}
+        <div className="header-progress">
+          <StageIndicator stage={stage} />
+        </div>
         <div className="header-actions" aria-label="상단 작업">
           <ModelStatus />
           {isArticleModalOpen && hideArticleModal && (
@@ -462,29 +591,17 @@ export default function App() {
             id="btn-new-session-header"
             onClick={() => {
               if (hasSession && window.confirm('현재 진행 중인 조례 작업이 있습니다. 새로 시작하시겠습니까?')) {
-                resetState()
               } else if (hasSession) {
                 return
               }
-              setIsOnboardingOpen(true)
+              handleNewSession()
             }}
-            style={{ padding: '6px 14px', background: '#1e40af', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}
           >
             ✚ 새 조례 만들기
           </button>
           <button
             className="header-help-action"
             onClick={() => setTutorialStep(getInitialTutorialStep())}
-            style={{
-              padding: '6px 12px',
-              background: 'rgba(255,255,255,0.15)',
-              border: '1px solid rgba(255,255,255,0.35)',
-              borderRadius: '8px',
-              color: '#ffffff',
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
           >
             ? 도움말
           </button>
@@ -504,60 +621,106 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        <div className="qa-main-area">
+        <div className="workspace-shell">
+          <aside className="workspace-qa-panel" aria-label="법령 Q&A">
           <QAPanel
             sessionId={sessionIdRef.current}
             stage={stage}
             currentArticleKey={currentArticleKey}
             qaHistory={qaHistory}
             onAddMessages={(msgs) => setQaHistory((prev) => [...prev, ...msgs])}
-            onApplyContent={(content) => {
-              setPendingQAContent(content)
+            onApplyContent={(request) => {
+              setPendingApplication({
+                ...request,
+                requestId: Date.now(),
+              })
+              setWorkspaceTab('articles')
               if (isArticleModalOpen && hideArticleModal) setHideArticleModal(false)
             }}
             onNewSession={handleNewSession}
             fontSize={fontSize}
+            evidenceRefreshKey={evidenceRefreshKey}
           />
 
           {error && (
-            <div className="error-bar">
+            <div className="error-bar" role="alert">
               ⚠️ {error}
-              <button onClick={() => setError(null)}>✕</button>
+              <button type="button" onClick={() => setError(null)} aria-label="오류 메시지 닫기">✕</button>
             </div>
           )}
+          </aside>
+
+          <section className="workspace-editor-pane" aria-label="조례 작업 영역">
+            <div className="workspace-tabs" role="tablist" aria-label="조례 작업 보기">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={workspaceTab === 'articles'}
+                className={workspaceTab === 'articles' ? 'active' : ''}
+                onClick={() => setWorkspaceTab('articles')}
+                disabled={!isArticleModalOpen}
+              >
+                상세 조례
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={workspaceTab === 'draft'}
+                className={workspaceTab === 'draft' ? 'active' : ''}
+                onClick={() => setWorkspaceTab('draft')}
+                disabled={!pendingDraft}
+              >
+                조례 초안
+              </button>
+            </div>
+
+            <div className="workspace-tab-content">
+              {workspaceTab === 'articles' && isArticleModalOpen ? (
+                <ArticleItemsModal
+                  embedded
+                  articles={mappedArticles}
+                  isLoading={isLoading}
+                  onSubmit={handleArticlesSubmit}
+                  onClose={() => undefined}
+                  fontSize={fontSize}
+                  onFontSizeChange={setFontSize}
+                  similarOrdinances={similarOrdinances}
+                  pendingApplication={pendingApplication}
+                  onApplicationApplied={handleApplicationApplied}
+                  onApplicationCancelled={() => setPendingApplication(null)}
+                  onCurrentArticleChange={setCurrentArticleKey}
+                  onOpenQA={() => document.getElementById('qa-input')?.focus()}
+                />
+              ) : workspaceTab === 'draft' && pendingDraft ? (
+                <DraftModal
+                  embedded
+                  draft={pendingDraft}
+                  isLoading={isLoading}
+                  legalIssues={pendingLegalIssues}
+                  isLegallyValid={isLegallyValid}
+                  onRequestLegalReview={handleLegalReview}
+                  onFinalize={handleFinalize}
+                  onClose={() => undefined}
+                />
+              ) : (
+                <div className="workspace-empty">
+                  <span aria-hidden="true">§</span>
+                  <h2>조례 작업 영역</h2>
+                  <p>새 조례 설계를 시작하면 상세 조문과 조례 초안을 이곳에서 함께 편집할 수 있습니다.</p>
+                  <button type="button" onClick={handleNewSession}>새 조례 설계 시작</button>
+                </div>
+              )}
+            </div>
+          </section>
         </div>
       </main>
 
-      {isDraftModalOpen && pendingDraft && (
-        <DraftModal
-          draft={pendingDraft}
-          isLoading={isLoading}
-          legalIssues={pendingLegalIssues}
-          isLegallyValid={isLegallyValid}
-          onRequestLegalReview={handleLegalReview}
-          onFinalize={handleFinalize}
-          onClose={() => setIsDraftModalOpen(false)}
-        />
-      )}
-
-      {isArticleModalOpen && !hideArticleModal && (
-        <ArticleItemsModal
-          articles={mappedArticles}
-          isLoading={isLoading}
-          onSubmit={handleArticlesSubmit}
-          onClose={() => setHideArticleModal(true)}
-          fontSize={fontSize}
-          onFontSizeChange={setFontSize}
-          similarOrdinances={similarOrdinances}
-          pendingQAContent={pendingQAContent}
-          onQAContentApplied={handleQAContentApplied}
-          onOpenQA={handleOpenQAFromArticleModal}
-        />
-      )}
-
       <OnboardingWizard
         isOpen={isOnboardingOpen}
-        onClose={() => setIsOnboardingOpen(false)}
+        onClose={() => {
+          setIsOnboardingOpen(false)
+          if (route.kind === 'new') navigate('/', { replace: true })
+        }}
         onStart={handleWizardStart}
         isLoading={isLoading}
       />

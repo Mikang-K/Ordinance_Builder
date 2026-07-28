@@ -9,6 +9,7 @@ interface Props {
   onRequestLegalReview: (editedDraft: string) => void
   onFinalize: (finalDraft: string) => void
   onClose: () => void
+  embedded?: boolean
 }
 
 const SEVERITY_CONFIG = {
@@ -25,6 +26,7 @@ export default function DraftModal({
   onRequestLegalReview,
   onFinalize,
   onClose,
+  embedded = false,
 }: Props) {
   const [editedDraft, setEditedDraft] = useState(draft)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -39,12 +41,13 @@ export default function DraftModal({
   }, [])
 
   useEffect(() => {
+    if (embedded) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [embedded, onClose])
 
   const hasHighIssues = legalIssues?.some((i) => i.severity === 'HIGH') ?? false
   const sorted = legalIssues ? [...legalIssues].sort((a, b) => {
@@ -68,11 +71,14 @@ export default function DraftModal({
   }
 
   return (
-    <div className="draft-modal-backdrop" onClick={handleBackdropClick}>
+    <div
+      className={embedded ? 'workspace-embedded-editor' : 'draft-modal-backdrop'}
+      onClick={embedded ? undefined : handleBackdropClick}
+    >
       <div
-        className="draft-modal"
-        role="dialog"
-        aria-modal="true"
+        className={`draft-modal${embedded ? ' draft-modal-embedded' : ''}`}
+        role={embedded ? 'region' : 'dialog'}
+        aria-modal={embedded ? undefined : true}
         aria-labelledby="draft-modal-title"
         aria-describedby="draft-modal-hint"
       >
@@ -83,7 +89,7 @@ export default function DraftModal({
             <span className="draft-modal-icon" aria-hidden="true">📄</span>
             <h2 id="draft-modal-title">조례 초안 검토 · 편집</h2>
           </div>
-          <button className="draft-modal-close" onClick={onClose} aria-label="닫기">✕</button>
+          {!embedded && <button className="draft-modal-close" onClick={onClose} aria-label="닫기">✕</button>}
         </div>
 
         {/* ── Hint ── */}

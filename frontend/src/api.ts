@@ -7,6 +7,9 @@ import type {
   SessionSummary,
   ModelRuntimeStatus,
   ModelStatusResponse,
+  EvidenceCreateInput,
+  EvidenceItem,
+  EvidenceUpdateInput,
 } from './types'
 import { getIdToken } from './firebase'
 
@@ -159,5 +162,75 @@ export async function searchDirectQuestion(
     body: JSON.stringify({ question, ...context }),
   })
   if (!res.ok) throw new Error(`직접 검색 Q&A 요청 실패: ${res.status}`)
+  return res.json()
+}
+
+function evidencePath(sessionId: string, evidenceId?: string): string {
+  const base = `/api/v1/session/${encodeURIComponent(sessionId)}/evidence`
+  return evidenceId ? `${base}/${encodeURIComponent(evidenceId)}` : base
+}
+
+function normalizeEvidenceList(payload: unknown): EvidenceItem[] {
+  if (Array.isArray(payload)) return payload as EvidenceItem[]
+  if (!payload || typeof payload !== 'object') return []
+  const record = payload as Record<string, unknown>
+  const items = record.items ?? record.evidence
+  return Array.isArray(items) ? items as EvidenceItem[] : []
+}
+
+export async function listEvidence(sessionId: string): Promise<EvidenceItem[]> {
+  const res = await fetch(apiUrl(evidencePath(sessionId)), {
+    headers: await authHeaders(),
+  })
+  if (!res.ok) throw new Error(`근거 목록을 불러오지 못했습니다: ${res.status}`)
+  return normalizeEvidenceList(await res.json())
+}
+
+export async function createEvidence(
+  sessionId: string,
+  evidence: EvidenceCreateInput,
+): Promise<EvidenceItem> {
+  const res = await fetch(apiUrl(evidencePath(sessionId)), {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(evidence),
+  })
+  if (!res.ok) throw new Error(`근거를 저장하지 못했습니다: ${res.status}`)
+  return res.json()
+}
+
+export async function updateEvidence(
+  sessionId: string,
+  evidenceId: string,
+  changes: EvidenceUpdateInput,
+): Promise<EvidenceItem> {
+  const res = await fetch(apiUrl(evidencePath(sessionId, evidenceId)), {
+    method: 'PATCH',
+    headers: await authHeaders(),
+    body: JSON.stringify(changes),
+  })
+  if (!res.ok) throw new Error(`근거를 수정하지 못했습니다: ${res.status}`)
+  return res.json()
+}
+
+export async function deleteEvidence(sessionId: string, evidenceId: string): Promise<void> {
+  const res = await fetch(apiUrl(evidencePath(sessionId, evidenceId)), {
+    method: 'DELETE',
+    headers: await authHeaders(),
+  })
+  if (!res.ok) throw new Error(`근거를 삭제하지 못했습니다: ${res.status}`)
+}
+
+export async function markEvidenceApplied(
+  sessionId: string,
+  evidenceId: string,
+  targetArticleKey: string,
+): Promise<EvidenceItem> {
+  const res = await fetch(apiUrl(`${evidencePath(sessionId, evidenceId)}/applied`), {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ target_article_key: targetArticleKey }),
+  })
+  if (!res.ok) throw new Error(`근거 적용 상태를 저장하지 못했습니다: ${res.status}`)
   return res.json()
 }

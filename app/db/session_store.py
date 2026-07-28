@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     chat_history    JSONB       NOT NULL DEFAULT '[]'::jsonb,
     qa_history      JSONB       NOT NULL DEFAULT '[]'::jsonb,
+    evidence_library JSONB      NOT NULL DEFAULT '[]'::jsonb,
     initial_message TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id);
@@ -33,6 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id);
 
 _MIGRATE_SQL = """
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS qa_history JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS evidence_library JSONB NOT NULL DEFAULT '[]'::jsonb;
 """
 
 _INIT_DB_LOCK_ID = 872139016233
@@ -130,6 +132,145 @@ async def save_qa_history(session_id: str, qa_history: list[dict]) -> None:
             (json.dumps(qa_history, ensure_ascii=False), session_id),
         )
         await conn.commit()
+
+
+def _evidence_dedup_key(item: dict[str, Any]) -> tuple[str, str, str, str]:
+    """Return the stable identity used to suppress duplicate evidence."""
+    return (
+        str(item.get("source_type") or ""),
+        str(item.get("title") or ""),
+        str(item.get("article_no") or ""),
+        str(item.get("content") or ""),
+    )
+
+
+async def add_evidence_item(
+    session_id: str,
+    item: dict[str, Any],
+) -> tuple[dict[str, Any] | None, bool]:
+    """Atomically append evidence, returning an existing duplicate when present."""
+    async with _pool.connection() as conn:
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                """
+                SELECT evidence_library
+                FROM sessions
+                WHERE session_id = %s
+                FOR UPDATE
+                """,
+                (session_id,),
+            )
+            row = await cur.fetchone()
+            if row is None:
+                return None, False
+
+            evidence_library = list(row.get("evidence_library") or [])
+            dedup_key = _evidence_dedup_key(item)
+            for existing in evidence_library:
+                if _evidence_dedup_key(existing) == dedup_key:
+                    return existing, False
+
+            evidence_library.append(item)
+            await cur.execute(
+                """
+                UPDATE sessions
+                SET evidence_library = %s::jsonb
+                WHERE session_id = %s
+                """,
+                (json.dumps(evidence_library, ensure_ascii=False), session_id),
+            )
+        await conn.commit()
+    return item, True
+
+
+async def update_evidence_item(
+    session_id: str,
+    evidence_id: str,
+    changes: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Atomically update one item while preserving the evidence dedup invariant."""
+    async with _pool.connection() as conn:
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                """
+                SELECT evidence_library
+                FROM sessions
+                WHERE session_id = %s
+                FOR UPDATE
+                """,
+                (session_id,),
+            )
+            row = await cur.fetchone()
+            if row is None:
+                return None
+
+            evidence_library = list(row.get("evidence_library") or [])
+            item_index = next(
+                (
+                    index
+                    for index, item in enumerate(evidence_library)
+                    if str(item.get("id")) == evidence_id
+                ),
+                None,
+            )
+            if item_index is None:
+                return None
+
+            updated_item = {**evidence_library[item_index], **changes}
+            updated_key = _evidence_dedup_key(updated_item)
+            if any(
+                index != item_index and _evidence_dedup_key(item) == updated_key
+                for index, item in enumerate(evidence_library)
+            ):
+                raise ValueError("duplicate_evidence")
+
+            evidence_library[item_index] = updated_item
+            await cur.execute(
+                """
+                UPDATE sessions
+                SET evidence_library = %s::jsonb
+                WHERE session_id = %s
+                """,
+                (json.dumps(evidence_library, ensure_ascii=False), session_id),
+            )
+        await conn.commit()
+    return updated_item
+
+
+async def delete_evidence_item(session_id: str, evidence_id: str) -> bool:
+    """Atomically delete one evidence item."""
+    async with _pool.connection() as conn:
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                """
+                SELECT evidence_library
+                FROM sessions
+                WHERE session_id = %s
+                FOR UPDATE
+                """,
+                (session_id,),
+            )
+            row = await cur.fetchone()
+            if row is None:
+                return False
+
+            evidence_library = list(row.get("evidence_library") or [])
+            retained = [
+                item for item in evidence_library if str(item.get("id")) != evidence_id
+            ]
+            if len(retained) == len(evidence_library):
+                return False
+
+            await cur.execute(
+                """
+                UPDATE sessions
+                SET evidence_library = %s::jsonb
+                WHERE session_id = %s
+                """,
+                (json.dumps(retained, ensure_ascii=False), session_id),
+            )
+        await conn.commit()
+    return True
 
 
 async def update_session(

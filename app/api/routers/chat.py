@@ -15,6 +15,10 @@ from app.api.schemas import (
     ArticleBatchRequest,
     ChatRequest,
     ChatResponse,
+    EvidenceAppliedRequest,
+    EvidenceCreateRequest,
+    EvidenceItem,
+    EvidenceUpdateRequest,
     FinalizeRequest,
     FinalizeResponse,
     MessageRecord,
@@ -36,11 +40,14 @@ from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.llm import get_llm
 from app.db.session_store import (
+    add_evidence_item as db_add_evidence_item,
     create_session as db_create_session,
+    delete_evidence_item as db_delete_evidence_item,
     delete_session as db_delete_session,
     get_session as db_get_session,
     list_sessions_by_user,
     save_qa_history as db_save_qa_history,
+    update_evidence_item as db_update_evidence_item,
     update_session as db_update_session,
 )
 from app.graph.nodes._article_examples import find_article_examples
@@ -335,7 +342,120 @@ async def get_session_state(
         current_article_key=values.get("current_article_key"),
         ordinance_type=values.get("ordinance_type"),
         qa_history=[QAMessageRecord(**m) for m in qa_history_data] or None,
+        evidence_library=[
+            EvidenceItem.model_validate(item)
+            for item in (entry.get("evidence_library") or [])
+        ],
     )
+
+
+@router.get(
+    "/session/{session_id}/evidence",
+    response_model=list[EvidenceItem],
+)
+async def list_evidence(
+    session_id: uuid.UUID,
+    user_id: str = Depends(get_current_user),
+):
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
+    return [
+        EvidenceItem.model_validate(item)
+        for item in (entry.get("evidence_library") or [])
+    ]
+
+
+@router.post(
+    "/session/{session_id}/evidence",
+    response_model=EvidenceItem,
+)
+async def create_evidence(
+    session_id: uuid.UUID,
+    body: EvidenceCreateRequest,
+    user_id: str = Depends(get_current_user),
+):
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
+
+    evidence = {
+        "id": str(uuid.uuid4()),
+        **body.model_dump(mode="json"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    stored, _created = await db_add_evidence_item(sid, evidence)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    return EvidenceItem.model_validate(stored)
+
+
+@router.patch(
+    "/session/{session_id}/evidence/{evidence_id}",
+    response_model=EvidenceItem,
+)
+@router.put(
+    "/session/{session_id}/evidence/{evidence_id}",
+    response_model=EvidenceItem,
+)
+async def update_evidence(
+    session_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    body: EvidenceUpdateRequest,
+    user_id: str = Depends(get_current_user),
+):
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
+
+    changes = body.model_dump(mode="json", exclude_unset=True)
+    try:
+        updated = await db_update_evidence_item(sid, str(evidence_id), changes)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Duplicate evidence.") from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Evidence item not found.")
+    return EvidenceItem.model_validate(updated)
+
+
+@router.post(
+    "/session/{session_id}/evidence/{evidence_id}/applied",
+    response_model=EvidenceItem,
+)
+async def mark_evidence_applied(
+    session_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    body: EvidenceAppliedRequest = EvidenceAppliedRequest(),
+    user_id: str = Depends(get_current_user),
+):
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
+
+    changes = {
+        "applied_at": datetime.now(timezone.utc).isoformat(),
+        **body.model_dump(mode="json", exclude_unset=True),
+    }
+    updated = await db_update_evidence_item(sid, str(evidence_id), changes)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Evidence item not found.")
+    return EvidenceItem.model_validate(updated)
+
+
+@router.delete(
+    "/session/{session_id}/evidence/{evidence_id}",
+    status_code=204,
+)
+async def delete_evidence(
+    session_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    user_id: str = Depends(get_current_user),
+):
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
+    if not await db_delete_evidence_item(sid, str(evidence_id)):
+        raise HTTPException(status_code=404, detail="Evidence item not found.")
 
 
 @router.post("/session", response_model=SessionCreateResponse)

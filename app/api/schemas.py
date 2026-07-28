@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ModelStatusItem(BaseModel):
@@ -42,6 +43,54 @@ class QAMessageRecord(BaseModel):
     applicable_article_key: Optional[str] = None
 
 
+EvidenceSourceType = Literal["statute", "ordinance", "legal_term", "qa_answer"]
+
+
+class EvidenceItemBase(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    source_type: EvidenceSourceType
+    title: str = Field(..., min_length=1, max_length=500)
+    article_no: str = Field(..., max_length=200)
+    content: str = Field(..., min_length=1, max_length=100_000)
+    relation_type: Optional[str] = Field(None, max_length=100)
+    target_article_key: Optional[str] = Field(None, max_length=200)
+    applicable_content: Optional[str] = Field(None, max_length=100_000)
+    note: Optional[str] = Field(None, max_length=10_000)
+    source_message_id: Optional[str] = Field(None, max_length=200)
+    applied_at: Optional[datetime] = None
+
+
+class EvidenceCreateRequest(EvidenceItemBase):
+    pass
+
+
+class EvidenceUpdateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    source_type: Optional[EvidenceSourceType] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=500)
+    article_no: Optional[str] = Field(None, max_length=200)
+    content: Optional[str] = Field(None, min_length=1, max_length=100_000)
+    relation_type: Optional[str] = Field(None, max_length=100)
+    target_article_key: Optional[str] = Field(None, max_length=200)
+    applicable_content: Optional[str] = Field(None, max_length=100_000)
+    note: Optional[str] = Field(None, max_length=10_000)
+    source_message_id: Optional[str] = Field(None, max_length=200)
+    applied_at: Optional[datetime] = None
+
+
+class EvidenceAppliedRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    target_article_key: Optional[str] = Field(None, max_length=200)
+
+
+class EvidenceItem(EvidenceItemBase):
+    id: str
+    created_at: datetime
+
+
 class SessionStateResponse(BaseModel):
     session_id: str
     title: str
@@ -56,6 +105,7 @@ class SessionStateResponse(BaseModel):
     current_article_key: Optional[str] = None
     ordinance_type: Optional[str] = None
     qa_history: Optional[list[QAMessageRecord]] = None
+    evidence_library: list[EvidenceItem] = Field(default_factory=list)
 
 
 class SessionCreateRequest(BaseModel):

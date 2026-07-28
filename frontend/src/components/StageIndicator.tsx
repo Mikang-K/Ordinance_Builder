@@ -31,20 +31,36 @@ interface Props {
 export default function StageIndicator({ stage }: Props) {
   const currentIndex = stage ? (STAGE_INDEX[stage] ?? -1) : -1
   const isCompleted = stage === 'completed'
+  const isError = stage === 'error'
+  const currentLabel = isError ? '오류 발생' : currentIndex >= 0 ? STAGES[currentIndex]?.label : '시작 전'
 
   return (
-    <div className="stage-indicator" aria-label="조례 작성 진행 단계">
+    <ol className="stage-indicator" aria-label={`조례 작성 진행 단계: ${currentLabel}`}>
+      {isError && (
+        <li
+          className="stage-error-status"
+          role="status"
+          style={{ marginRight: '10px', color: '#fecaca', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+        >
+          <span aria-hidden="true">!</span> 진행 오류
+        </li>
+      )}
       {STAGES.map((s, i) => {
         const done = isCompleted || i < currentIndex
         const active = !isCompleted && i === currentIndex
         return (
-          <div key={s.key} className={`stage-step ${done ? 'done' : ''} ${active ? 'active' : ''}`}>
+          <li
+            key={s.key}
+            className={`stage-step ${done ? 'done' : ''} ${active ? 'active' : ''}`}
+            aria-current={active ? 'step' : undefined}
+          >
             <div className="stage-dot" aria-hidden="true">{done ? '✓' : i + 1}</div>
             <span className="stage-label">{s.label}</span>
-            {i < STAGES.length - 1 && <div className={`stage-line ${done ? 'done' : ''}`} />}
-          </div>
+            <span className="sr-only">{done ? '완료' : active ? '현재 단계' : '예정'}</span>
+            {i < STAGES.length - 1 && <span className={`stage-line ${done ? 'done' : ''}`} aria-hidden="true" />}
+          </li>
         )
       })}
-    </div>
+    </ol>
   )
 }
