@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import type { CSSProperties } from 'react'
 import type { EvidenceApplyRequest, SimilarOrdinance } from '../types'
 import { ARTICLE_STRUCTURED_OPTIONS, formatSelectionAsText } from '../constants/interviewOptions'
 import EvidenceApplyDialog, { type EvidenceApplyMode } from './evidence/EvidenceApplyDialog'
@@ -88,6 +89,12 @@ export default function ArticleItemsModal({
   const [applyDuplicate, setApplyDuplicate] = useState(false)
   const [undoValue, setUndoValue] = useState<{ key: string; value: string | null | undefined } | null>(null)
   const [applicationStatus, setApplicationStatus] = useState('')
+  const [previewFontSize, setPreviewFontSize] = useState(fontSize)
+
+  useEffect(() => setPreviewFontSize(fontSize), [fontSize])
+  const commitFontSize = () => {
+    if (previewFontSize !== fontSize) onFontSizeChange(previewFontSize)
+  }
 
   // Specifically for the "정의" article
   const [definitions, setDefinitions] = useState<{ term: string; desc: string }[]>([{ term: '', desc: '' }])
@@ -288,6 +295,7 @@ export default function ArticleItemsModal({
         aria-modal={embedded ? undefined : true}
         aria-labelledby="article-items-title"
         style={{ 
+          '--article-font-size': `${previewFontSize}px`,
           maxWidth: '1200px', 
           width: '95vw', 
           height: 'min(90vh, 850px)', 
@@ -296,7 +304,7 @@ export default function ArticleItemsModal({
           flexDirection: 'column',
           animation: 'none', // Override slideInRight
           boxShadow: '0 8px 32px rgba(0,0,0,0.18)'
-        }}
+        } as CSSProperties}
       >
         <div className="draft-modal-header article-items-header" style={{ padding: '16px 24px', height: '70px', boxSizing: 'border-box', flexShrink: 0 }}>
           <div className="draft-modal-title">
@@ -332,8 +340,11 @@ export default function ArticleItemsModal({
                 min="12"
                 max="24"
                 step="0.5"
-                value={fontSize}
-                onChange={(e) => onFontSizeChange(Number(e.target.value))}
+                value={previewFontSize}
+                onChange={(e) => setPreviewFontSize(Number(e.target.value))}
+                onPointerUp={commitFontSize}
+                onKeyUp={commitFontSize}
+                onBlur={commitFontSize}
                 style={{ width: '120px', accentColor: '#1e40af' }}
                 title="폰트 크기"
                 aria-label="폰트 크기"

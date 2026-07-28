@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import type { CSSProperties } from 'react'
 import type { EvidenceApplyRequest, LegalIssue, QAMessage, SimilarOrdinance, Stage } from './types'
 import { createSession, sendMessage, finalizeSession, getSessionState, markEvidenceApplied, submitArticlesBatch } from './api'
 import { auth, loginWithGoogle, logout, onAuthStateChanged, getRedirectResult } from './firebase'
 import type { User } from './firebase'
-import StageIndicator from './components/StageIndicator'
 import DraftModal from './components/DraftModal'
 import SessionListScreen from './components/SessionListScreen'
 import ArticleItemsModal from './components/ArticleItemsModal'
@@ -13,6 +13,7 @@ import QAPanel from './components/QAPanel'
 import OnboardingWizard from './components/OnboardingWizard'
 import TutorialOverlay, { TUTORIAL_STEP_COUNT } from './components/TutorialOverlay'
 import ModelStatus from './components/ModelStatus'
+import WorkspaceHeader from './components/WorkspaceHeader'
 
 type AppRoute =
   | { kind: 'list' }
@@ -154,11 +155,18 @@ export default function App() {
   }
 
   const sessionIdRef = useRef<string | null>(null)
-  const [fontSize, setFontSize] = useState<number>(16)
-
-  useEffect(() => {
-    document.documentElement.style.fontSize = `${fontSize}px`
-  }, [fontSize])
+  const [fontSize, setFontSize] = useState<number>(() => {
+    const saved = Number(localStorage.getItem('ordinance_workspace_font_size'))
+    return saved >= 12 && saved <= 24 ? saved : 16
+  })
+  const handleFontSizeCommit = useCallback((value: number) => {
+    setFontSize(value)
+    localStorage.setItem('ordinance_workspace_font_size', String(value))
+  }, [])
+  const workspaceRef = useRef<HTMLElement>(null)
+  const handleFontSizePreview = useCallback((value: number) => {
+    workspaceRef.current?.style.setProperty('--workspace-font-size', `${value}px`)
+  }, [])
 
   // Auto-trigger tutorial on first login
   useEffect(() => {
@@ -537,90 +545,26 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="header-left">
-          <div className="header-brand">
-            <h1 className="app-title">조례 빌더 AI</h1>
-            <span className="app-subtitle">지방 조례 초안 자동 생성 서비스</span>
-          </div>
-          <div className="ordinance-context" aria-label="현재 조례 작업">
-            <span className="ordinance-context-label">현재 작업</span>
-            <strong>{ordinanceType ? `${ordinanceType} 조례` : '새 조례 설계'}</strong>
-          </div>
-          <div className="font-size-control">
-            <label className="font-size-label" htmlFor="app-font-size">글자 크기</label>
-            <input
-              id="app-font-size"
-              className="font-size-range"
-              type="range"
-              min="12"
-              max="24"
-              step="0.5"
-              value={fontSize}
-              aria-label="본문 글자 크기"
-              aria-valuetext={`${fontSize}px`}
-              onChange={(event) => setFontSize(Number(event.target.value))}
-            />
-            <output className="font-size-value" htmlFor="app-font-size" aria-live="polite">
-              {fontSize}px
-            </output>
-          </div>
-        </div>
-        <div className="header-progress">
-          <StageIndicator stage={stage} />
-        </div>
-        <div className="header-actions" aria-label="상단 작업">
-          <ModelStatus />
-          {isArticleModalOpen && hideArticleModal && (
-            <button className="open-draft-btn" onClick={() => setHideArticleModal(false)}>
-              상세 조항 편집
-            </button>
-          )}
-          {pendingDraft && !isDraftModalOpen && stage !== 'completed' && (
-            <button className="open-draft-btn" onClick={() => setIsDraftModalOpen(true)}>
-              초안 편집 · 검증
-            </button>
-          )}
-          {completedDraft && !isCompletedDraftModalOpen && (
-            <button className="open-draft-btn" style={{ background: '#16a34a' }} onClick={() => setIsCompletedDraftModalOpen(true)}>
-              확정 초안 보기
-            </button>
-          )}
-          <button
-            className="header-primary-action"
-            id="btn-new-session-header"
-            onClick={() => {
-              if (hasSession && window.confirm('현재 진행 중인 조례 작업이 있습니다. 새로 시작하시겠습니까?')) {
-              } else if (hasSession) {
-                return
-              }
-              handleNewSession()
-            }}
-          >
-            ✚ 새 조례 만들기
-          </button>
-          <button
-            className="header-help-action"
-            onClick={() => setTutorialStep(getInitialTutorialStep())}
-          >
-            ? 도움말
-          </button>
-          <button className="reset-btn" onClick={handleReset}>목록</button>
-          <div className="app-user-info" style={userInfoStyle}>
-            {user.photoURL && (
-              <img src={user.photoURL} alt="프로필" style={avatarStyle} referrerPolicy="no-referrer" />
-            )}
-            <span style={{ fontSize: '0.85rem', opacity: 0.9, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user.displayName || user.email}
-            </span>
-            <button className="reset-btn" onClick={handleLogout} style={{ marginLeft: '4px' }}>
-              로그아웃
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="app-main">
+      <WorkspaceHeader
+        ordinanceType={ordinanceType}
+        stage={stage}
+        fontSize={fontSize}
+        onFontSizePreview={handleFontSizePreview}
+        onFontSizeCommit={handleFontSizeCommit}
+        articleAction={isArticleModalOpen && hideArticleModal ? () => setHideArticleModal(false) : undefined}
+        draftAction={pendingDraft && !isDraftModalOpen && stage !== 'completed' ? () => setIsDraftModalOpen(true) : undefined}
+        completedAction={completedDraft && !isCompletedDraftModalOpen ? () => setIsCompletedDraftModalOpen(true) : undefined}
+        onNewSession={() => {
+          if (hasSession && !window.confirm('현재 진행 중인 조례 작업이 있습니다. 새로 시작하시겠습니까?')) return
+          handleNewSession()
+        }}
+        onTutorial={() => setTutorialStep(getInitialTutorialStep())}
+        onBackToList={handleReset}
+        onLogout={handleLogout}
+        userName={user.displayName || user.email || '사용자'}
+        userPhotoURL={user.photoURL}
+      />
+      <main ref={workspaceRef} className="app-main workspace-font-scope" style={{ '--workspace-font-size': `${fontSize}px` } as CSSProperties}>
         <div className="workspace-shell">
           <aside className="workspace-qa-panel" aria-label="법령 Q&A">
           <QAPanel
@@ -683,7 +627,7 @@ export default function App() {
                   onSubmit={handleArticlesSubmit}
                   onClose={() => undefined}
                   fontSize={fontSize}
-                  onFontSizeChange={setFontSize}
+                  onFontSizeChange={handleFontSizeCommit}
                   similarOrdinances={similarOrdinances}
                   pendingApplication={pendingApplication}
                   onApplicationApplied={handleApplicationApplied}
@@ -781,21 +725,6 @@ const googleBtnStyle: React.CSSProperties = {
   cursor: 'pointer',
   boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
   transition: 'box-shadow 0.15s, transform 0.1s',
-}
-
-// ── 헤더 사용자 정보 스타일 ────────────────────────────────────────────────
-const userInfoStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  marginLeft: '8px',
-}
-
-const avatarStyle: React.CSSProperties = {
-  width: '28px',
-  height: '28px',
-  borderRadius: '50%',
-  border: '2px solid rgba(255,255,255,0.6)',
 }
 
 // ── 인앱 브라우저 감지 ────────────────────────────────────────────────────
