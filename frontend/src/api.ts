@@ -10,6 +10,7 @@ import type {
   EvidenceCreateInput,
   EvidenceItem,
   EvidenceUpdateInput,
+  WorkspaceResponse,
 } from './types'
 import { getIdToken } from './firebase'
 
@@ -129,6 +130,42 @@ export async function getSessionState(sessionId: string): Promise<SessionStateRe
   })
   if (!res.ok) throw new Error(`세션 상태 조회 실패: ${res.status}`)
   return res.json()
+}
+
+async function workspaceMutation(path: string, method: 'PATCH' | 'POST', body?: object): Promise<WorkspaceResponse> {
+  const res = await fetch(apiUrl(path), {
+    method,
+    headers: await authHeaders(),
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) throw new Error(`작업공간 요청 실패: ${res.status}`)
+  return res.json()
+}
+
+export async function getWorkspace(sessionId: string): Promise<WorkspaceResponse> {
+  const res = await fetch(apiUrl(`/api/v1/session/${sessionId}/workspace`), { headers: await authHeaders() })
+  if (!res.ok) throw new Error(`작업공간 조회 실패: ${res.status}`)
+  return res.json()
+}
+
+export function saveRevisionArticles(sessionId: string, revisionId: string, articles: Record<string, string | null>, expectedVersion: number) {
+  return workspaceMutation(`/api/v1/session/${sessionId}/revisions/${revisionId}/articles`, 'PATCH', { articles, expected_version: expectedVersion })
+}
+
+export function regenerateRevisionFromArticles(sessionId: string, expectedVersion: number) {
+  return workspaceMutation(`/api/v1/session/${sessionId}/revisions/from-articles`, 'POST', { expected_version: expectedVersion })
+}
+
+export function saveRevisionDraft(sessionId: string, revisionId: string, draftText: string, expectedVersion: number) {
+  return workspaceMutation(`/api/v1/session/${sessionId}/revisions/${revisionId}/draft`, 'PATCH', { draft_text: draftText, expected_version: expectedVersion })
+}
+
+export function reviewRevision(sessionId: string, revisionId: string, expectedVersion: number) {
+  return workspaceMutation(`/api/v1/session/${sessionId}/revisions/${revisionId}/legal-review`, 'POST', { expected_version: expectedVersion })
+}
+
+export function finalizeRevision(sessionId: string, revisionId: string, expectedVersion: number) {
+  return workspaceMutation(`/api/v1/session/${sessionId}/revisions/${revisionId}/finalize`, 'POST', { expected_version: expectedVersion })
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {

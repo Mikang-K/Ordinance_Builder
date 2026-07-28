@@ -18,6 +18,7 @@ interface Props {
   onCurrentArticleChange?: (articleKey: string | null) => void
   onOpenQA?: () => void
   embedded?: boolean
+  initialValues?: Record<string, string | null>
 }
 
 const ARTICLE_GUIDES: Record<string, { title: string; hint: string; example?: string }> = {
@@ -78,6 +79,7 @@ export default function ArticleItemsModal({
   onCurrentArticleChange,
   onOpenQA,
   embedded = false,
+  initialValues,
 }: Props) {
   // values: null means "AI default". string means "User Input". undefined means "not evaluated yet".
   const [values, setValues] = useState<Record<string, string | null>>({})
@@ -102,13 +104,13 @@ export default function ArticleItemsModal({
   useEffect(() => {
     const initial: Record<string, string | null> = {}
     articles.forEach((key) => {
-      initial[key] = '' // empty by default
+      initial[key] = initialValues?.[key] ?? ''
     })
     setValues(initial)
     setStructuredSelections({})
     setCurrentIndex(0)
     setDefinitions([{ term: '', desc: '' }])
-  }, [articles])
+  }, [articles, initialValues])
 
   // Sync definitions back to values['정의'] — only reacts to definitions changes, not navigation
   useEffect(() => {

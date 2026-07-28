@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import asynccontextmanager
 from typing import Any
 
 from psycopg.rows import dict_row
@@ -40,6 +41,20 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS evidence_library JSONB NOT NULL DE
 _INIT_DB_LOCK_ID = 872139016233
 
 _pool: AsyncConnectionPool | None = None
+
+
+@asynccontextmanager
+async def session_revision_lock(session_id: str):
+    """Serialize revision mutations across workers for one session."""
+    async with _pool.connection() as conn:
+        await conn.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (session_id,),
+        )
+        try:
+            yield
+        finally:
+            await conn.commit()
 
 
 async def init_db() -> None:

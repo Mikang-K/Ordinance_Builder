@@ -94,6 +94,43 @@ export interface SessionStateResponse {
   qa_history?: QAMessage[] | null
 }
 
+export type RevisionStatus =
+  | 'editing_articles'
+  | 'drafting'
+  | 'editing_draft'
+  | 'legal_reviewing'
+  | 'ready_to_finalize'
+  | 'completed'
+
+export interface WorkspaceRevision {
+  revision_id: string
+  revision_number: number
+  status: RevisionStatus
+  version: number
+  article_contents: Record<string, string | null>
+  draft_full_text: string
+  legal_issues: LegalIssue[]
+  is_legally_valid: boolean | null
+  legal_reviewed_at: string | null
+  finalized_at: string | null
+  created_at: string
+  updated_at: string
+  based_on_revision_id: string | null
+}
+
+export interface WorkspaceResponse {
+  session_id: string
+  active_revision_id: string | null
+  finalized_revision_id: string | null
+  active_revision: WorkspaceRevision | null
+  finalized_revision: WorkspaceRevision | null
+  revisions: WorkspaceRevision[]
+  can_edit_articles: boolean
+  can_edit_draft: boolean
+  can_finalize: boolean
+  regeneration_required: string | null
+}
+
 export interface QASource {
   source_type: 'statute' | 'ordinance' | 'legal_term'
   title: string

@@ -86,6 +86,13 @@ class OrdinanceBuilderState(TypedDict):
     legal_issues: list[dict]     # [{"severity": str, "description": str, ...}]
     is_legally_valid: Optional[bool]
 
+    # --- Workspace document revisions (stored in the existing checkpoint) ---
+    # Revision snapshots keep previously finalized text immutable while allowing
+    # a completed session to start a new editing cycle without a DB migration.
+    revisions: list[dict]
+    active_revision_id: Optional[str]
+    finalized_revision_id: Optional[str]
+
     # Ordinance type: "지원" | "설치·운영" | "관리·규제" | "복지·서비스" | None (legacy fallback)
     ordinance_type: Optional[str]
 

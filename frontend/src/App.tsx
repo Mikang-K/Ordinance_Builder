@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import type { CSSProperties } from 'react'
-import type { EvidenceApplyRequest, LegalIssue, QAMessage, SimilarOrdinance, Stage } from './types'
-import { createSession, sendMessage, finalizeSession, getSessionState, markEvidenceApplied, submitArticlesBatch } from './api'
+import type { EvidenceApplyRequest, LegalIssue, QAMessage, SimilarOrdinance, Stage, WorkspaceResponse } from './types'
+import { createSession, sendMessage, finalizeSession, finalizeRevision, getSessionState, getWorkspace, markEvidenceApplied, regenerateRevisionFromArticles, reviewRevision, saveRevisionArticles, saveRevisionDraft, submitArticlesBatch } from './api'
 import { auth, loginWithGoogle, logout, onAuthStateChanged, getRedirectResult } from './firebase'
 import type { User } from './firebase'
 import DraftModal from './components/DraftModal'
@@ -14,6 +14,7 @@ import OnboardingWizard from './components/OnboardingWizard'
 import TutorialOverlay, { TUTORIAL_STEP_COUNT } from './components/TutorialOverlay'
 import ModelStatus from './components/ModelStatus'
 import WorkspaceHeader from './components/WorkspaceHeader'
+import WorkspaceDocumentTabs, { type WorkspaceDocumentTab } from './components/WorkspaceDocumentTabs'
 
 type AppRoute =
   | { kind: 'list' }
@@ -34,6 +35,11 @@ function readRoute(pathname = window.location.pathname): AppRoute {
   }
 
   return { kind: 'list' }
+}
+
+function readWorkspaceTab(search = window.location.search): WorkspaceDocumentTab {
+  const tab = new URLSearchParams(search).get('tab')
+  return tab === 'draft' || tab === 'final' ? tab : 'articles'
 }
 
 export default function App() {
@@ -57,6 +63,7 @@ export default function App() {
       requestGenerationRef.current += 1
       routeRef.current = nextRoute
       setRoute(nextRoute)
+      setWorkspaceTab(readWorkspaceTab())
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
@@ -124,7 +131,6 @@ export default function App() {
   // Finalized result state
   const [completedDraft, setCompletedDraft] = useState<string | null>(null)
   const [finalLegalIssues, setFinalLegalIssues] = useState<LegalIssue[] | null>(null)
-  const [isCompletedDraftModalOpen, setIsCompletedDraftModalOpen] = useState(false)
 
   // Similar ordinances (shown after retrieving stage)
   const [similarOrdinances, setSimilarOrdinances] = useState<SimilarOrdinance[]>([])
@@ -140,7 +146,38 @@ export default function App() {
   const [evidenceRefreshKey, setEvidenceRefreshKey] = useState(0)
   const [hasSession, setHasSession] = useState(false)
   const [ordinanceType, setOrdinanceType] = useState<string | null>(null)
-  const [workspaceTab, setWorkspaceTab] = useState<'articles' | 'draft'>('articles')
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceDocumentTab>(() => readWorkspaceTab())
+  const [workspace, setWorkspace] = useState<WorkspaceResponse | null>(null)
+  const selectWorkspaceTab = useCallback((tab: WorkspaceDocumentTab, options?: { replace?: boolean }) => {
+    setWorkspaceTab(tab)
+    if (routeRef.current.kind !== 'session') return
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', tab)
+    window.history[options?.replace ? 'replaceState' : 'pushState'](null, '', `${url.pathname}${url.search}`)
+  }, [])
+  const applyWorkspace = useCallback((next: WorkspaceResponse) => {
+    setWorkspace(next)
+    const active = next.active_revision
+    const finalized = next.finalized_revision
+    setPendingDraft(active?.draft_full_text || null)
+    setPendingLegalIssues(active?.legal_issues ?? null)
+    setIsLegallyValid(active?.is_legally_valid ?? null)
+    setCompletedDraft(finalized?.draft_full_text || null)
+    setFinalLegalIssues(finalized?.legal_issues?.length ? finalized.legal_issues : null)
+  }, [])
+  const recoverWorkspace = useCallback(async (sessionId: string, requestGeneration: number) => {
+    try {
+      const latest = await getWorkspace(sessionId)
+      if (
+        requestGenerationRef.current !== requestGeneration ||
+        routeRef.current.kind !== 'session' ||
+        routeRef.current.sessionId !== sessionId
+      ) return
+      applyWorkspace(latest)
+    } catch {
+      // Preserve the original mutation error; the next explicit retry will refetch again.
+    }
+  }, [applyWorkspace])
 
   // Tutorial state
   const [tutorialStep, setTutorialStep] = useState(-1)   // -1 = inactive, 0~4 = active step
@@ -228,7 +265,7 @@ export default function App() {
       setPendingLegalIssues(null)  // reset issues for new draft
       setIsLegallyValid(null)
       setIsDraftModalOpen(true)
-      setWorkspaceTab('draft')
+      selectWorkspaceTab('draft')
     }
 
     // Legal check result received → update issues in modal, keep modal open
@@ -237,7 +274,7 @@ export default function App() {
       if (res.legal_issues !== undefined) setPendingLegalIssues(res.legal_issues ?? null)
       setIsLegallyValid(res.is_legally_valid ?? null)
       setIsDraftModalOpen(true)  // ensure modal stays open
-      setWorkspaceTab('draft')
+      selectWorkspaceTab('draft')
     }
 
     // Workflow fully completed (after /finalize)
@@ -245,7 +282,7 @@ export default function App() {
       if (res.draft) setCompletedDraft(res.draft)
       if (res.legal_issues) setFinalLegalIssues(res.legal_issues)
       setIsDraftModalOpen(false)
-      setIsCompletedDraftModalOpen(true)
+      selectWorkspaceTab('final')
     }
   }
 
@@ -281,6 +318,22 @@ export default function App() {
     setLoadingMessage('법률 조항을 검증하고 있습니다...')
 
     try {
+      if (workspace?.active_revision) {
+        const saved = await saveRevisionDraft(requestSessionId, workspace.active_revision.revision_id, editedDraft, workspace.active_revision.version)
+        if (
+          requestGenerationRef.current !== requestGeneration ||
+          routeRef.current.kind !== 'session' ||
+          routeRef.current.sessionId !== requestSessionId
+        ) return
+        applyWorkspace(saved)
+        const savedRevision = saved.active_revision
+        if (!savedRevision) throw new Error('저장된 개정본을 찾을 수 없습니다.')
+        const reviewed = await reviewRevision(requestSessionId, savedRevision.revision_id, savedRevision.version)
+        if (requestGenerationRef.current !== requestGeneration) return
+        applyWorkspace(reviewed)
+        selectWorkspaceTab('draft')
+        return
+      }
       const res = await sendMessage(requestSessionId, '법률 검증을 요청합니다.', editedDraft)
       if (
         requestGenerationRef.current !== requestGeneration ||
@@ -290,6 +343,10 @@ export default function App() {
       applyResponse(res)
     } catch (e) {
       if (requestGenerationRef.current !== requestGeneration) return
+      if (workspace?.active_revision) {
+        await recoverWorkspace(requestSessionId, requestGeneration)
+        if (requestGenerationRef.current !== requestGeneration) return
+      }
       setError(e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.')
     } finally {
       if (requestGenerationRef.current !== requestGeneration) return
@@ -308,6 +365,17 @@ export default function App() {
     setLoadingMessage('조례 초안을 확정하는 중입니다...')
 
     try {
+      if (workspace?.active_revision) {
+        if (finalDraft !== workspace.active_revision.draft_full_text) {
+          throw new Error('초안이 변경되었습니다. 법률 검토를 다시 실행한 뒤 확정해 주세요.')
+        }
+        const finalized = await finalizeRevision(requestSessionId, workspace.active_revision.revision_id, workspace.active_revision.version)
+        if (requestGenerationRef.current !== requestGeneration) return
+        applyWorkspace(finalized)
+        setStage('completed')
+        selectWorkspaceTab('final')
+        return
+      }
       const res = await finalizeSession(requestSessionId, finalDraft)
       if (
         requestGenerationRef.current !== requestGeneration ||
@@ -318,7 +386,7 @@ export default function App() {
       setFinalLegalIssues(res.legal_issues?.length ? res.legal_issues : null)
       setIsDraftModalOpen(false)
       setStage('completed')
-      setIsCompletedDraftModalOpen(true)
+      selectWorkspaceTab('final')
     } catch (e) {
       if (requestGenerationRef.current !== requestGeneration) return
       setError(e instanceof Error ? e.message : '확정 중 오류가 발생했습니다.')
@@ -340,7 +408,6 @@ export default function App() {
     setIsLegallyValid(null)
     setCompletedDraft(null)
     setFinalLegalIssues(null)
-    setIsCompletedDraftModalOpen(false)
     setSimilarOrdinances([])
     setArticleQueue([])
     setCurrentArticleKey(null)
@@ -350,6 +417,7 @@ export default function App() {
     setHasSession(false)
     setOrdinanceType(null)
     setError(null)
+    setWorkspaceTab(readWorkspaceTab())
   }
 
   const handleReset = () => {
@@ -393,8 +461,17 @@ export default function App() {
     setLoadingMessage('작업 내용을 불러오고 있습니다...')
 
     getSessionState(route.sessionId)
-      .then((state) => {
+      .then(async (state) => {
         if (sessionLoadIdRef.current !== loadId) return
+        let loadedWorkspace: WorkspaceResponse | null = null
+        try {
+          const workspaceState = await getWorkspace(route.sessionId)
+          if (sessionLoadIdRef.current !== loadId) return
+          loadedWorkspace = workspaceState
+          applyWorkspace(workspaceState)
+        } catch {
+          // Legacy sessions can continue to use the checkpoint-shaped response below.
+        }
         sessionIdRef.current = state.session_id
         setHasSession(true)
         setStage(state.stage as Stage)
@@ -406,15 +483,20 @@ export default function App() {
         if (state.qa_history != null) setQaHistory(state.qa_history)
 
         if (state.stage === 'completed') {
-          if (state.draft) setCompletedDraft(state.draft)
+          if (state.draft) {
+            setCompletedDraft(state.draft)
+            setPendingDraft(state.draft)
+          }
           if (state.legal_issues?.length) setFinalLegalIssues(state.legal_issues)
-          setIsCompletedDraftModalOpen(true)
+          const requestedTab = readWorkspaceTab()
+          const hasArticles = Object.keys(loadedWorkspace?.active_revision?.article_contents ?? {}).length > 0
+          selectWorkspaceTab(requestedTab === 'articles' && !hasArticles ? 'final' : requestedTab, { replace: requestedTab === 'articles' && !hasArticles })
         } else if (state.draft) {
           setPendingDraft(state.draft)
           if (state.legal_issues) setPendingLegalIssues(state.legal_issues)
           if (state.stage === 'draft_review' || state.stage === 'legal_checking') {
             setIsDraftModalOpen(true)
-            setWorkspaceTab('draft')
+            selectWorkspaceTab(readWorkspaceTab() === 'final' ? 'draft' : readWorkspaceTab(), { replace: true })
           }
         }
       })
@@ -437,6 +519,23 @@ export default function App() {
     setIsLoading(true)
     setLoadingMessage('조례 초안을 생성하고 있습니다...')
     try {
+      if (workspace?.active_revision) {
+        const saved = await saveRevisionArticles(requestSessionId, workspace.active_revision.revision_id, articles, workspace.active_revision.version)
+        if (
+          requestGenerationRef.current !== requestGeneration ||
+          routeRef.current.kind !== 'session' ||
+          routeRef.current.sessionId !== requestSessionId
+        ) return
+        applyWorkspace(saved)
+        const savedRevision = saved.active_revision
+        if (!savedRevision) throw new Error('저장된 개정본을 찾을 수 없습니다.')
+        const regenerated = await regenerateRevisionFromArticles(requestSessionId, savedRevision.version)
+        if (requestGenerationRef.current !== requestGeneration) return
+        applyWorkspace(regenerated)
+        setStage('draft_review')
+        selectWorkspaceTab('draft')
+        return
+      }
       const res = await submitArticlesBatch(requestSessionId, articles)
       if (
         requestGenerationRef.current !== requestGeneration ||
@@ -446,6 +545,10 @@ export default function App() {
       applyResponse(res)
     } catch (e) {
       if (requestGenerationRef.current !== requestGeneration) return
+      if (workspace?.active_revision) {
+        await recoverWorkspace(requestSessionId, requestGeneration)
+        if (requestGenerationRef.current !== requestGeneration) return
+      }
       setError(e instanceof Error ? e.message : '항목 전송에 실패했습니다.')
     } finally {
       if (requestGenerationRef.current !== requestGeneration) return
@@ -454,11 +557,25 @@ export default function App() {
     }
   }
 
-  const mappedArticles = useMemo(
-    () => currentArticleKey ? [currentArticleKey, ...articleQueue] : [],
-    [currentArticleKey, articleQueue]
+  const mappedArticles = useMemo(() => {
+    const revisionKeys = Object.keys(workspace?.active_revision?.article_contents ?? {})
+    return revisionKeys.length ? revisionKeys : (currentArticleKey ? [currentArticleKey, ...articleQueue] : [])
+  }, [workspace, currentArticleKey, articleQueue])
+  const isArticleModalOpen = mappedArticles.length > 0 && (
+    stage === 'article_interviewing' || workspace?.can_edit_articles === true
   )
-  const isArticleModalOpen = stage === 'article_interviewing' && mappedArticles.length > 0
+  useEffect(() => {
+    if (route.kind !== 'session' || isLoading) return
+    const availability: Record<WorkspaceDocumentTab, boolean> = {
+      articles: isArticleModalOpen,
+      draft: Boolean(pendingDraft),
+      final: Boolean(completedDraft),
+    }
+    if (availability[workspaceTab]) return
+    const fallback = (['articles', 'draft', 'final'] as WorkspaceDocumentTab[])
+      .find((tab) => availability[tab])
+    if (fallback) selectWorkspaceTab(fallback, { replace: true })
+  }, [route, isLoading, workspaceTab, isArticleModalOpen, pendingDraft, completedDraft, selectWorkspaceTab])
   const handleApplicationApplied = useCallback((request: EvidenceApplyRequest) => {
     setPendingApplication(null)
     const requestSessionId = sessionIdRef.current
@@ -551,9 +668,9 @@ export default function App() {
         fontSize={fontSize}
         onFontSizePreview={handleFontSizePreview}
         onFontSizeCommit={handleFontSizeCommit}
-        articleAction={isArticleModalOpen && hideArticleModal ? () => setHideArticleModal(false) : undefined}
-        draftAction={pendingDraft && !isDraftModalOpen && stage !== 'completed' ? () => setIsDraftModalOpen(true) : undefined}
-        completedAction={completedDraft && !isCompletedDraftModalOpen ? () => setIsCompletedDraftModalOpen(true) : undefined}
+        articleAction={isArticleModalOpen ? () => selectWorkspaceTab('articles') : undefined}
+        draftAction={pendingDraft ? () => selectWorkspaceTab('draft') : undefined}
+        completedAction={completedDraft ? () => selectWorkspaceTab('final') : undefined}
         onNewSession={() => {
           if (hasSession && !window.confirm('현재 진행 중인 조례 작업이 있습니다. 새로 시작하시겠습니까?')) return
           handleNewSession()
@@ -578,7 +695,7 @@ export default function App() {
                 ...request,
                 requestId: Date.now(),
               })
-              setWorkspaceTab('articles')
+              selectWorkspaceTab('articles')
               if (isArticleModalOpen && hideArticleModal) setHideArticleModal(false)
             }}
             onNewSession={handleNewSession}
@@ -595,34 +712,27 @@ export default function App() {
           </aside>
 
           <section className="workspace-editor-pane" aria-label="조례 작업 영역">
-            <div className="workspace-tabs" role="tablist" aria-label="조례 작업 보기">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={workspaceTab === 'articles'}
-                className={workspaceTab === 'articles' ? 'active' : ''}
-                onClick={() => setWorkspaceTab('articles')}
-                disabled={!isArticleModalOpen}
-              >
-                상세 조례
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={workspaceTab === 'draft'}
-                className={workspaceTab === 'draft' ? 'active' : ''}
-                onClick={() => setWorkspaceTab('draft')}
-                disabled={!pendingDraft}
-              >
-                조례 초안
-              </button>
-            </div>
+            <WorkspaceDocumentTabs
+              activeTab={workspaceTab}
+              onChange={selectWorkspaceTab}
+              tabs={[
+                { id: 'articles', label: '상세 조례', status: workspace?.active_revision?.status === 'editing_articles' ? '변경됨' : '작성 중', disabled: !isArticleModalOpen, disabledReason: '편집할 상세 조례가 없습니다.' },
+                { id: 'draft', label: '조례 초안', status: workspace?.active_revision?.status === 'ready_to_finalize' ? '검토 완료' : pendingDraft ? '법률 검토 필요' : '생성 필요', disabled: !pendingDraft, disabledReason: '상세 조례를 제출하면 초안을 확인할 수 있습니다.' },
+                { id: 'final', label: '확정 조례', status: completedDraft ? '확정' : '확정 필요', disabled: !completedDraft, disabledReason: '법률 검토 후 확정할 수 있습니다.' },
+              ]}
+            />
 
-            <div className="workspace-tab-content">
+            <div
+              className="workspace-tab-content"
+              id={`workspace-panel-${workspaceTab}`}
+              role="tabpanel"
+              aria-labelledby={`workspace-tab-${workspaceTab}`}
+            >
               {workspaceTab === 'articles' && isArticleModalOpen ? (
                 <ArticleItemsModal
                   embedded
                   articles={mappedArticles}
+                  initialValues={workspace?.active_revision?.article_contents}
                   isLoading={isLoading}
                   onSubmit={handleArticlesSubmit}
                   onClose={() => undefined}
@@ -638,12 +748,22 @@ export default function App() {
               ) : workspaceTab === 'draft' && pendingDraft ? (
                 <DraftModal
                   embedded
+                  canEdit={workspace ? workspace.can_edit_draft && workspace.active_revision?.status !== 'completed' : stage !== 'completed'}
+                  canFinalize={workspace ? workspace.can_finalize : pendingLegalIssues !== null}
                   draft={pendingDraft}
                   isLoading={isLoading}
                   legalIssues={pendingLegalIssues}
                   isLegallyValid={isLegallyValid}
                   onRequestLegalReview={handleLegalReview}
                   onFinalize={handleFinalize}
+                  onClose={() => undefined}
+                />
+              ) : workspaceTab === 'final' && completedDraft && sessionIdRef.current ? (
+                <CompletedDraftModal
+                  embedded
+                  sessionId={sessionIdRef.current}
+                  draft={completedDraft}
+                  legalIssues={finalLegalIssues}
                   onClose={() => undefined}
                 />
               ) : (
@@ -668,15 +788,6 @@ export default function App() {
         onStart={handleWizardStart}
         isLoading={isLoading}
       />
-
-      {isCompletedDraftModalOpen && completedDraft && sessionIdRef.current && (
-        <CompletedDraftModal
-          sessionId={sessionIdRef.current}
-          draft={completedDraft}
-          legalIssues={finalLegalIssues}
-          onClose={() => setIsCompletedDraftModalOpen(false)}
-        />
-      )}
 
       {isLoading && loadingMessage && <LoadingModal message={loadingMessage} />}
 

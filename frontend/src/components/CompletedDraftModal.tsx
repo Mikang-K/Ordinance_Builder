@@ -7,6 +7,7 @@ interface Props {
   draft: string
   legalIssues: LegalIssue[] | null
   onClose: () => void
+  embedded?: boolean
 }
 
 const SEVERITY_CONFIG = {
@@ -37,7 +38,7 @@ function saveBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-export default function CompletedDraftModal({ sessionId, draft, legalIssues, onClose }: Props) {
+export default function CompletedDraftModal({ sessionId, draft, legalIssues, onClose, embedded = false }: Props) {
   const [downloadingFormat, setDownloadingFormat] = useState<'txt' | 'docx' | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [filename, setFilename] = useState(DEFAULT_FILE_BASENAME)
@@ -47,12 +48,13 @@ export default function CompletedDraftModal({ sessionId, draft, legalIssues, onC
   }
 
   useEffect(() => {
+    if (embedded) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [embedded, onClose])
 
   const handleDownload = async (format: 'txt' | 'docx') => {
     if (downloadingFormat) return
@@ -77,11 +79,14 @@ export default function CompletedDraftModal({ sessionId, draft, legalIssues, onC
   }) : []
 
   return (
-    <div className="draft-modal-backdrop" onClick={handleBackdropClick}>
+    <div
+      className={embedded ? 'workspace-embedded-editor' : 'draft-modal-backdrop'}
+      onClick={embedded ? undefined : handleBackdropClick}
+    >
       <div
-        className="draft-modal completed-draft-modal"
-        role="dialog"
-        aria-modal="true"
+        className={`draft-modal completed-draft-modal${embedded ? ' draft-modal-embedded' : ''}`}
+        role={embedded ? 'region' : 'dialog'}
+        aria-modal={embedded ? undefined : true}
         aria-labelledby="completed-draft-title"
       >
         <div className="draft-modal-header completed-draft-header">

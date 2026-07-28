@@ -184,6 +184,59 @@ class FinalizeResponse(BaseModel):
     is_legally_valid: Optional[bool]
 
 
+RevisionStatus = Literal[
+    "editing_articles",
+    "drafting",
+    "editing_draft",
+    "legal_reviewing",
+    "ready_to_finalize",
+    "completed",
+]
+
+
+class WorkspaceRevision(BaseModel):
+    revision_id: str
+    revision_number: int
+    status: RevisionStatus
+    version: int
+    article_contents: dict[str, Optional[str]] = Field(default_factory=dict)
+    draft_full_text: str = ""
+    legal_issues: list = Field(default_factory=list)
+    is_legally_valid: Optional[bool] = None
+    legal_reviewed_at: Optional[datetime] = None
+    finalized_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    based_on_revision_id: Optional[str] = None
+
+
+class WorkspaceResponse(BaseModel):
+    session_id: str
+    active_revision_id: Optional[str] = None
+    finalized_revision_id: Optional[str] = None
+    active_revision: Optional[WorkspaceRevision] = None
+    finalized_revision: Optional[WorkspaceRevision] = None
+    revisions: list[WorkspaceRevision] = Field(default_factory=list)
+    can_edit_articles: bool
+    can_edit_draft: bool
+    can_finalize: bool
+    regeneration_required: Optional[str] = None
+
+
+class ArticlesRevisionRequest(BaseModel):
+    articles: dict[str, Optional[str]]
+    expected_version: int = Field(..., ge=1)
+
+
+class DraftRevisionRequest(BaseModel):
+    draft_text: str = Field(..., min_length=1, max_length=100_000)
+    expected_version: int = Field(..., ge=1)
+
+
+class RevisionMutationRequest(BaseModel):
+    expected_version: int = Field(..., ge=1)
+
+
 class QASource(BaseModel):
     source_type: Literal["statute", "ordinance", "legal_term"]
     title: str

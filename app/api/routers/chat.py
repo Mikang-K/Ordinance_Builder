@@ -34,6 +34,11 @@ from app.api.schemas import (
     SessionStateResponse,
     SessionSummary,
     SuggestedOption,
+    ArticlesRevisionRequest,
+    DraftRevisionRequest,
+    RevisionMutationRequest,
+    WorkspaceResponse,
+    WorkspaceRevision,
 )
 from app.core.auth import get_current_user
 from app.core.config import settings
@@ -54,6 +59,14 @@ from app.graph.nodes._article_examples import find_article_examples
 from app.graph.workflow import get_db, get_graph
 from app.prompts.qa_agent import QA_SYSTEM, QAOutput, build_qa_human
 from app.services.qa_service import direct_search_qa
+from app.services.revision_service import (
+    check_version as _check_version,
+    draft_hash as _draft_hash,
+    find_revision as _find_revision,
+    revision_view as _revision_view,
+    workspace_response as _workspace_response,
+)
+from app.db.session_store import session_revision_lock
 
 logger = logging.getLogger(__name__)
 
@@ -275,9 +288,14 @@ _DEFAULT_STATE: dict[str, Any] = {
     "draft_review_decision": None,
     "legal_issues": [],
     "is_legally_valid": None,
+    "revisions": [],
+    "active_revision_id": None,
+    "finalized_revision_id": None,
     "response_to_user": "",
     "error_message": None,
 }
+
+
 
 
 @router.get("/sessions", response_model=list[SessionSummary])
@@ -672,6 +690,306 @@ async def submit_articles_batch(
     )
 
 
+async def _owned_workspace(
+    session_id: uuid.UUID, user_id: str
+) -> tuple[str, dict, Any, dict[str, Any]]:
+    sid = str(session_id)
+    entry = await db_get_session(sid)
+    _require_ownership(entry, user_id, sid)
+    graph = get_graph()
+    config = {"configurable": {"thread_id": sid}}
+    snapshot = await graph.aget_state(config)
+    values = dict((snapshot.values or {}) if snapshot else {})
+    return sid, entry, graph, values
+
+
+async def _lock_revision_mutation(session_id: uuid.UUID):
+    async with session_revision_lock(str(session_id)):
+        yield
+
+
+@router.get("/session/{session_id}/workspace", response_model=WorkspaceResponse)
+async def get_workspace(
+    session_id: uuid.UUID,
+    user_id: str = Depends(get_current_user),
+):
+    sid, _entry, _graph, values = await _owned_workspace(session_id, user_id)
+    return _workspace_response(sid, values)
+
+
+@router.get("/session/{session_id}/revisions", response_model=list[WorkspaceRevision])
+async def list_revisions(
+    session_id: uuid.UUID,
+    user_id: str = Depends(get_current_user),
+):
+    _sid, _entry, _graph, values = await _owned_workspace(session_id, user_id)
+    revisions, _active_id, _finalized_id = _revision_view(values)
+    return [WorkspaceRevision.model_validate(item) for item in revisions]
+
+
+@router.patch(
+    "/session/{session_id}/revisions/{revision_id}/articles",
+    response_model=WorkspaceResponse,
+)
+async def save_revision_articles(
+    session_id: uuid.UUID,
+    revision_id: str,
+    body: ArticlesRevisionRequest,
+    user_id: str = Depends(get_current_user),
+    _lock: None = Depends(_lock_revision_mutation),
+):
+    sid, _entry, graph, values = await _owned_workspace(session_id, user_id)
+    revisions, active_id, finalized_id = _revision_view(values)
+    index, current = _find_revision(revisions, revision_id)
+    _check_version(current, body.expected_version)
+
+    # Editing a finalized revision branches instead of overwriting it.
+    if revision_id == finalized_id or current.get("status") == "completed":
+        now = datetime.now(timezone.utc).isoformat()
+        current = {
+            **current,
+            "revision_id": str(uuid.uuid4()),
+            "revision_number": max(r["revision_number"] for r in revisions) + 1,
+            "status": "editing_articles",
+            "version": 1,
+            "article_contents": body.articles,
+            "draft_full_text": "",
+            "legal_issues": [],
+            "is_legally_valid": None,
+            "reviewed_draft_hash": None,
+            "legal_reviewed_at": None,
+            "finalized_at": None,
+            "created_at": now,
+            "updated_at": now,
+            "based_on_revision_id": revision_id,
+        }
+        revisions.append(current)
+        active_id = current["revision_id"]
+    else:
+        current = {
+            **current,
+            "article_contents": body.articles,
+            "status": "editing_articles",
+            "version": current["version"] + 1,
+            "draft_full_text": "",
+            "legal_issues": [],
+            "is_legally_valid": None,
+            "reviewed_draft_hash": None,
+            "legal_reviewed_at": None,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        revisions[index] = current
+
+    config = {"configurable": {"thread_id": sid}}
+    await graph.aupdate_state(config, {
+        "revisions": revisions,
+        "active_revision_id": active_id,
+        "finalized_revision_id": finalized_id,
+        "article_contents": body.articles,
+        "draft_full_text": "",
+        "legal_issues": [],
+        "is_legally_valid": None,
+        "current_stage": "article_complete",
+    })
+    values.update(
+        revisions=revisions, active_revision_id=active_id,
+        finalized_revision_id=finalized_id, current_stage="article_complete",
+    )
+    return _workspace_response(sid, values)
+
+
+@router.post(
+    "/session/{session_id}/revisions/from-articles",
+    response_model=WorkspaceResponse,
+)
+async def regenerate_from_articles(
+    session_id: uuid.UUID,
+    body: RevisionMutationRequest,
+    user_id: str = Depends(get_current_user),
+    _lock: None = Depends(_lock_revision_mutation),
+):
+    sid, entry, graph, values = await _owned_workspace(session_id, user_id)
+    revisions, active_id, finalized_id = _revision_view(values)
+    if not active_id:
+        raise HTTPException(status_code=409, detail="No active revision.")
+    index, current = _find_revision(revisions, active_id)
+    _check_version(current, body.expected_version)
+    if current.get("status") != "editing_articles":
+        raise HTTPException(status_code=409, detail="Article regeneration is not required.")
+
+    config = {"configurable": {"thread_id": sid}}
+    result = await graph.ainvoke({
+        "article_contents": current["article_contents"],
+        "article_queue": [],
+        "current_article_key": None,
+        "current_stage": "article_complete",
+        "legal_issues": [],
+        "is_legally_valid": None,
+    }, config=config)
+    now = datetime.now(timezone.utc).isoformat()
+    updated = {
+        **current,
+        "status": "editing_draft",
+        "version": current["version"] + 1,
+        "draft_full_text": result.get("draft_full_text") or "",
+        "legal_issues": [],
+        "is_legally_valid": None,
+        "reviewed_draft_hash": None,
+        "updated_at": now,
+    }
+    revisions[index] = updated
+    await graph.aupdate_state(config, {
+        "revisions": revisions, "active_revision_id": active_id,
+        "finalized_revision_id": finalized_id,
+    })
+    await db_update_session(
+        session_id=sid, stage="draft_review", title=entry["title"],
+        chat_history=list(entry.get("chat_history") or []),
+    )
+    result.update(revisions=revisions, active_revision_id=active_id,
+                  finalized_revision_id=finalized_id)
+    return _workspace_response(sid, result)
+
+
+@router.patch(
+    "/session/{session_id}/revisions/{revision_id}/draft",
+    response_model=WorkspaceResponse,
+)
+async def save_revision_draft(
+    session_id: uuid.UUID,
+    revision_id: str,
+    body: DraftRevisionRequest,
+    user_id: str = Depends(get_current_user),
+    _lock: None = Depends(_lock_revision_mutation),
+):
+    sid, entry, graph, values = await _owned_workspace(session_id, user_id)
+    revisions, active_id, finalized_id = _revision_view(values)
+    index, current = _find_revision(revisions, revision_id)
+    if revision_id != active_id or current.get("status") == "completed":
+        raise HTTPException(status_code=409, detail="Only the active revision can be edited.")
+    _check_version(current, body.expected_version)
+    updated = {
+        **current,
+        "draft_full_text": body.draft_text,
+        "status": "editing_draft",
+        "version": current["version"] + 1,
+        "legal_issues": [],
+        "is_legally_valid": None,
+        "reviewed_draft_hash": None,
+        "legal_reviewed_at": None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    revisions[index] = updated
+    config = {"configurable": {"thread_id": sid}}
+    await graph.aupdate_state(config, {
+        "revisions": revisions, "draft_full_text": body.draft_text,
+        "legal_issues": [], "is_legally_valid": None, "current_stage": "draft_review",
+    })
+    await db_update_session(
+        session_id=sid, stage="draft_review", title=entry["title"],
+        chat_history=list(entry.get("chat_history") or []),
+    )
+    values.update(revisions=revisions, active_revision_id=active_id,
+                  finalized_revision_id=finalized_id)
+    return _workspace_response(sid, values)
+
+
+@router.post(
+    "/session/{session_id}/revisions/{revision_id}/legal-review",
+    response_model=WorkspaceResponse,
+)
+async def review_revision(
+    session_id: uuid.UUID,
+    revision_id: str,
+    body: RevisionMutationRequest,
+    user_id: str = Depends(get_current_user),
+    _lock: None = Depends(_lock_revision_mutation),
+):
+    sid, entry, graph, values = await _owned_workspace(session_id, user_id)
+    revisions, active_id, finalized_id = _revision_view(values)
+    index, current = _find_revision(revisions, revision_id)
+    if revision_id != active_id:
+        raise HTTPException(status_code=409, detail="Only the active revision can be reviewed.")
+    _check_version(current, body.expected_version)
+    if not current.get("draft_full_text"):
+        raise HTTPException(status_code=400, detail="Draft is empty.")
+
+    config = {"configurable": {"thread_id": sid}}
+    result = await graph.ainvoke({
+        "draft_full_text": current["draft_full_text"],
+        "current_stage": "legal_review_requested",
+        "legal_issues": [],
+        "is_legally_valid": None,
+    }, config=config)
+    now = datetime.now(timezone.utc).isoformat()
+    updated = {
+        **current,
+        "status": "ready_to_finalize",
+        "version": current["version"] + 1,
+        "legal_issues": result.get("legal_issues") or [],
+        "is_legally_valid": result.get("is_legally_valid"),
+        "reviewed_draft_hash": _draft_hash(current["draft_full_text"]),
+        "legal_reviewed_at": now,
+        "updated_at": now,
+    }
+    revisions[index] = updated
+    await graph.aupdate_state(config, {
+        "revisions": revisions, "active_revision_id": active_id,
+        "finalized_revision_id": finalized_id,
+    })
+    await db_update_session(
+        session_id=sid, stage="legal_checking", title=entry["title"],
+        chat_history=list(entry.get("chat_history") or []),
+    )
+    result.update(revisions=revisions, active_revision_id=active_id,
+                  finalized_revision_id=finalized_id)
+    return _workspace_response(sid, result)
+
+
+@router.post(
+    "/session/{session_id}/revisions/{revision_id}/finalize",
+    response_model=WorkspaceResponse,
+)
+async def finalize_revision(
+    session_id: uuid.UUID,
+    revision_id: str,
+    body: RevisionMutationRequest,
+    user_id: str = Depends(get_current_user),
+    _lock: None = Depends(_lock_revision_mutation),
+):
+    sid, entry, graph, values = await _owned_workspace(session_id, user_id)
+    revisions, active_id, finalized_id = _revision_view(values)
+    index, current = _find_revision(revisions, revision_id)
+    if revision_id != active_id:
+        raise HTTPException(status_code=409, detail="Only the active revision can be finalized.")
+    _check_version(current, body.expected_version)
+    if (
+        current.get("status") != "ready_to_finalize"
+        or current.get("reviewed_draft_hash") != _draft_hash(current.get("draft_full_text") or "")
+    ):
+        raise HTTPException(status_code=409, detail="The current draft has not passed legal review.")
+    now = datetime.now(timezone.utc).isoformat()
+    revisions[index] = {
+        **current, "status": "completed", "version": current["version"] + 1,
+        "finalized_at": now, "updated_at": now,
+    }
+    config = {"configurable": {"thread_id": sid}}
+    await graph.aupdate_state(config, {
+        "revisions": revisions, "active_revision_id": revision_id,
+        "finalized_revision_id": revision_id, "current_stage": "completed",
+        "draft_full_text": current["draft_full_text"],
+        "legal_issues": current.get("legal_issues") or [],
+        "is_legally_valid": current.get("is_legally_valid"),
+    })
+    await db_update_session(
+        session_id=sid, stage="completed", title=entry["title"],
+        chat_history=list(entry.get("chat_history") or []),
+    )
+    values.update(revisions=revisions, active_revision_id=revision_id,
+                  finalized_revision_id=revision_id, current_stage="completed")
+    return _workspace_response(sid, values)
+
+
 @router.post("/session/{session_id}/finalize", response_model=FinalizeResponse)
 async def finalize_session(
     session_id: uuid.UUID,
@@ -694,17 +1012,45 @@ async def finalize_session(
     state_snapshot = await graph.aget_state(config)
     values = (state_snapshot.values or {}) if state_snapshot else {}
 
-    final_draft = request.draft_text or values.get("draft_full_text", "")
+    reviewed_draft = values.get("draft_full_text", "")
+    final_draft = request.draft_text or reviewed_draft
     if not final_draft:
         raise HTTPException(status_code=400, detail="확정할 초안이 없습니다.")
+    if values.get("current_stage") != "legal_checking" or final_draft != reviewed_draft:
+        raise HTTPException(
+            status_code=409,
+            detail="The current draft must complete legal review before finalization.",
+        )
 
     legal_issues = values.get("legal_issues") or []
     is_valid = values.get("is_legally_valid")
 
     if values:
+        revisions, active_id, _finalized_id = _revision_view(values)
+        if active_id:
+            index, revision = _find_revision(revisions, active_id)
+            now = datetime.now(timezone.utc).isoformat()
+            revisions[index] = {
+                **revision,
+                "draft_full_text": final_draft,
+                "legal_issues": legal_issues,
+                "is_legally_valid": is_valid,
+                "reviewed_draft_hash": _draft_hash(final_draft),
+                "legal_reviewed_at": revision.get("legal_reviewed_at") or now,
+                "status": "completed",
+                "version": revision["version"] + 1,
+                "finalized_at": now,
+                "updated_at": now,
+            }
         await graph.aupdate_state(
             config,
-            {"current_stage": "completed", "draft_full_text": final_draft},
+            {
+                "current_stage": "completed",
+                "draft_full_text": final_draft,
+                "revisions": revisions,
+                "active_revision_id": active_id,
+                "finalized_revision_id": active_id,
+            },
         )
 
     chat_history = list(entry.get("chat_history") or [])
@@ -734,15 +1080,19 @@ async def export_final_result(
     entry = await db_get_session(sid)
     _require_ownership(entry, user_id, sid)
 
-    if entry["stage"] != "completed":
-        raise HTTPException(status_code=409, detail="완료된 세션만 파일로 저장할 수 있습니다.")
-
     graph = get_graph()
     config = {"configurable": {"thread_id": sid}}
     state_snapshot = await graph.aget_state(config)
     values = (state_snapshot.values or {}) if state_snapshot else {}
 
-    draft = values.get("draft_full_text", "")
+    revisions, _active_id, finalized_id = _revision_view(values)
+    finalized = next(
+        (revision for revision in revisions if revision.get("revision_id") == finalized_id),
+        None,
+    )
+    if finalized is None and entry["stage"] != "completed":
+        raise HTTPException(status_code=409, detail="No finalized ordinance is available for export.")
+    draft = (finalized or {}).get("draft_full_text") or values.get("draft_full_text", "")
     if not draft:
         raise HTTPException(status_code=400, detail="저장할 최종 초안이 없습니다.")
 

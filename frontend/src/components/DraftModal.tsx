@@ -10,6 +10,8 @@ interface Props {
   onFinalize: (finalDraft: string) => void
   onClose: () => void
   embedded?: boolean
+  canEdit?: boolean
+  canFinalize?: boolean
 }
 
 const SEVERITY_CONFIG = {
@@ -27,6 +29,8 @@ export default function DraftModal({
   onFinalize,
   onClose,
   embedded = false,
+  canEdit = true,
+  canFinalize = true,
 }: Props) {
   const [editedDraft, setEditedDraft] = useState(draft)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -108,7 +112,7 @@ export default function DraftModal({
           value={editedDraft}
           onChange={(e) => setEditedDraft(e.target.value)}
           spellCheck={false}
-          disabled={isLoading}
+          disabled={isLoading || !canEdit}
         />
 
         {/* ── Legal issues panel (appears after first check) ── */}
@@ -169,7 +173,7 @@ export default function DraftModal({
           <button
             className="draft-modal-review-btn"
             onClick={() => onRequestLegalReview(editedDraft)}
-            disabled={isLoading || !editedDraft.trim()}
+            disabled={isLoading || !canEdit || !editedDraft.trim()}
           >
             {isLoading ? '검토 중...' : legalIssues !== null ? '재검증 요청' : '법률 검증 요청'}
           </button>
@@ -177,7 +181,7 @@ export default function DraftModal({
           <button
             className={`draft-modal-finalize-btn ${hasHighIssues ? 'has-warning' : ''}`}
             onClick={handleFinalizeClick}
-            disabled={isLoading}
+            disabled={isLoading || !canFinalize}
             title={hasHighIssues ? '중대한 법률 이슈가 있습니다. 그래도 확정하시겠습니까?' : '초안을 최종 확정합니다'}
           >
             초안 확정
