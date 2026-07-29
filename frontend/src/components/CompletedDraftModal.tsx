@@ -105,26 +105,28 @@ export default function CompletedDraftModal({ sessionId, draft, legalIssues, onC
                 disabled={downloadingFormat !== null}
               />
             </label>
-            <button
-              className="draft-modal-copy-btn"
-              onClick={() => navigator.clipboard.writeText(draft)}
-            >
-              복사
-            </button>
-            <button
-              className="draft-modal-copy-btn"
-              disabled={downloadingFormat !== null}
-              onClick={() => handleDownload('txt')}
-            >
-              {downloadingFormat === 'txt' ? '저장 중...' : 'TXT 저장'}
-            </button>
-            <button
-              className="draft-modal-copy-btn"
-              disabled={downloadingFormat !== null}
-              onClick={() => handleDownload('docx')}
-            >
-              {downloadingFormat === 'docx' ? '저장 중...' : 'Word 저장'}
-            </button>
+            <div className="completed-draft-file-actions">
+              <button
+                className="draft-modal-copy-btn"
+                onClick={() => navigator.clipboard.writeText(draft)}
+              >
+                복사
+              </button>
+              <button
+                className="draft-modal-copy-btn"
+                disabled={downloadingFormat !== null}
+                onClick={() => handleDownload('txt')}
+              >
+                {downloadingFormat === 'txt' ? '저장 중...' : 'TXT 저장'}
+              </button>
+              <button
+                className="draft-modal-copy-btn"
+                disabled={downloadingFormat !== null}
+                onClick={() => handleDownload('docx')}
+              >
+                {downloadingFormat === 'docx' ? '저장 중...' : 'Word 저장'}
+              </button>
+            </div>
             <button className="draft-modal-close" onClick={onClose} aria-label="닫기">×</button>
           </div>
         </div>

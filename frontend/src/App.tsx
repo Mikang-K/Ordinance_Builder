@@ -42,6 +42,11 @@ function readWorkspaceTab(search = window.location.search): WorkspaceDocumentTab
   return tab === 'draft' || tab === 'final' ? tab : 'articles'
 }
 
+const DEFAULT_QA_PANEL_WIDTH = 36
+const MIN_QA_PANEL_WIDTH = 25
+const MAX_QA_PANEL_WIDTH = 60
+const QA_PANEL_WIDTH_STORAGE_KEY = 'ordinance-builder-qa-panel-width'
+
 export default function App() {
   const [route, setRoute] = useState<AppRoute>(() => readRoute())
   const routeRef = useRef<AppRoute>(route)
@@ -139,6 +144,7 @@ export default function App() {
   // Article Modal State
   const [articleQueue, setArticleQueue] = useState<string[]>([])
   const [currentArticleKey, setCurrentArticleKey] = useState<string | null>(null)
+  const [submittedArticleContents, setSubmittedArticleContents] = useState<Record<string, string | null>>({})
   const [hideArticleModal, setHideArticleModal] = useState(false)
   // QA Panel State
   const [qaHistory, setQaHistory] = useState<QAMessage[]>([])
@@ -148,6 +154,13 @@ export default function App() {
   const [ordinanceType, setOrdinanceType] = useState<string | null>(null)
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceDocumentTab>(() => readWorkspaceTab())
   const [workspace, setWorkspace] = useState<WorkspaceResponse | null>(null)
+  const [qaPanelWidth, setQaPanelWidth] = useState(() => {
+    const saved = Number(window.localStorage.getItem(QA_PANEL_WIDTH_STORAGE_KEY))
+    return Number.isFinite(saved) && saved >= MIN_QA_PANEL_WIDTH && saved <= MAX_QA_PANEL_WIDTH
+      ? saved
+      : DEFAULT_QA_PANEL_WIDTH
+  })
+  const [isResizingWorkspace, setIsResizingWorkspace] = useState(false)
   const selectWorkspaceTab = useCallback((tab: WorkspaceDocumentTab, options?: { replace?: boolean }) => {
     setWorkspaceTab(tab)
     if (routeRef.current.kind !== 'session') return
@@ -200,7 +213,40 @@ export default function App() {
     setFontSize(value)
     localStorage.setItem('ordinance_workspace_font_size', String(value))
   }, [])
-  const workspaceRef = useRef<HTMLElement>(null)
+  const workspaceRef = useRef<HTMLDivElement>(null)
+  const workspaceShellRef = useRef<HTMLDivElement>(null)
+
+  const updateQaPanelWidth = useCallback((clientX: number) => {
+    const shell = workspaceShellRef.current
+    if (!shell) return
+    const bounds = shell.getBoundingClientRect()
+    if (!bounds.width) return
+    const nextWidth = Math.min(
+      MAX_QA_PANEL_WIDTH,
+      Math.max(MIN_QA_PANEL_WIDTH, ((bounds.right - clientX) / bounds.width) * 100),
+    )
+    setQaPanelWidth(nextWidth)
+  }, [])
+
+  useEffect(() => {
+    if (!isResizingWorkspace) return
+    const handlePointerMove = (event: PointerEvent) => updateQaPanelWidth(event.clientX)
+    const handlePointerUp = () => setIsResizingWorkspace(false)
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
+    document.body.classList.add('workspace-resizing')
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
+      document.body.classList.remove('workspace-resizing')
+    }
+  }, [isResizingWorkspace, updateQaPanelWidth])
+
+  useEffect(() => {
+    window.localStorage.setItem(QA_PANEL_WIDTH_STORAGE_KEY, String(qaPanelWidth))
+  }, [qaPanelWidth])
   const handleFontSizePreview = useCallback((value: number) => {
     workspaceRef.current?.style.setProperty('--workspace-font-size', `${value}px`)
   }, [])
@@ -411,6 +457,7 @@ export default function App() {
     setSimilarOrdinances([])
     setArticleQueue([])
     setCurrentArticleKey(null)
+    setSubmittedArticleContents({})
     setHideArticleModal(false)
     setQaHistory([])
     setPendingApplication(null)
@@ -513,6 +560,7 @@ export default function App() {
 
   const handleArticlesSubmit = async (articles: Record<string, string | null>) => {
     if (!sessionIdRef.current || isLoading) return
+    setSubmittedArticleContents(articles)
     const requestGeneration = requestGenerationRef.current
     const requestSessionId = sessionIdRef.current
     setError(null)
@@ -559,11 +607,12 @@ export default function App() {
 
   const mappedArticles = useMemo(() => {
     const revisionKeys = Object.keys(workspace?.active_revision?.article_contents ?? {})
-    return revisionKeys.length ? revisionKeys : (currentArticleKey ? [currentArticleKey, ...articleQueue] : [])
-  }, [workspace, currentArticleKey, articleQueue])
-  const isArticleModalOpen = mappedArticles.length > 0 && (
-    stage === 'article_interviewing' || workspace?.can_edit_articles === true
-  )
+    if (revisionKeys.length) return revisionKeys
+    const submittedKeys = Object.keys(submittedArticleContents)
+    if (submittedKeys.length) return submittedKeys
+    return currentArticleKey ? [currentArticleKey, ...articleQueue] : []
+  }, [workspace, submittedArticleContents, currentArticleKey, articleQueue])
+  const isArticleModalOpen = mappedArticles.length > 0
   useEffect(() => {
     if (route.kind !== 'session' || isLoading) return
     const availability: Record<WorkspaceDocumentTab, boolean> = {
@@ -661,7 +710,11 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div
+      ref={workspaceRef}
+      className="app workspace-font-scope"
+      style={{ '--workspace-font-size': `${fontSize}px` } as CSSProperties}
+    >
       <WorkspaceHeader
         ordinanceType={ordinanceType}
         stage={stage}
@@ -670,7 +723,6 @@ export default function App() {
         onFontSizeCommit={handleFontSizeCommit}
         articleAction={isArticleModalOpen ? () => selectWorkspaceTab('articles') : undefined}
         draftAction={pendingDraft ? () => selectWorkspaceTab('draft') : undefined}
-        completedAction={completedDraft ? () => selectWorkspaceTab('final') : undefined}
         onNewSession={() => {
           if (hasSession && !window.confirm('현재 진행 중인 조례 작업이 있습니다. 새로 시작하시겠습니까?')) return
           handleNewSession()
@@ -681,8 +733,12 @@ export default function App() {
         userName={user.displayName || user.email || '사용자'}
         userPhotoURL={user.photoURL}
       />
-      <main ref={workspaceRef} className="app-main workspace-font-scope" style={{ '--workspace-font-size': `${fontSize}px` } as CSSProperties}>
-        <div className="workspace-shell">
+      <main className="app-main">
+        <div
+          ref={workspaceShellRef}
+          className="workspace-shell"
+          style={{ '--qa-panel-width': `${qaPanelWidth}%` } as CSSProperties}
+        >
           <aside className="workspace-qa-panel" aria-label="법령 Q&A">
           <QAPanel
             sessionId={sessionIdRef.current}
@@ -711,14 +767,52 @@ export default function App() {
           )}
           </aside>
 
+          <div
+            className="workspace-resizer"
+            role="separator"
+            aria-label="작업 공간과 Q&A 영역 너비 조절"
+            aria-orientation="vertical"
+            aria-valuemin={MIN_QA_PANEL_WIDTH}
+            aria-valuemax={MAX_QA_PANEL_WIDTH}
+            aria-valuenow={Math.round(qaPanelWidth)}
+            tabIndex={0}
+            onPointerDown={(event) => {
+              event.preventDefault()
+              setIsResizingWorkspace(true)
+              updateQaPanelWidth(event.clientX)
+            }}
+            onDoubleClick={() => setQaPanelWidth(DEFAULT_QA_PANEL_WIDTH)}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowLeft') {
+                event.preventDefault()
+                setQaPanelWidth((width) => Math.min(MAX_QA_PANEL_WIDTH, width + 2))
+              }
+              if (event.key === 'ArrowRight') {
+                event.preventDefault()
+                setQaPanelWidth((width) => Math.max(MIN_QA_PANEL_WIDTH, width - 2))
+              }
+              if (event.key === 'Home') {
+                event.preventDefault()
+                setQaPanelWidth(MIN_QA_PANEL_WIDTH)
+              }
+              if (event.key === 'End') {
+                event.preventDefault()
+                setQaPanelWidth(MAX_QA_PANEL_WIDTH)
+              }
+            }}
+            title="드래그하여 영역 너비 조절 · 더블 클릭하여 초기화"
+          >
+            <span aria-hidden="true" />
+          </div>
+
           <section className="workspace-editor-pane" aria-label="조례 작업 영역">
             <WorkspaceDocumentTabs
               activeTab={workspaceTab}
               onChange={selectWorkspaceTab}
               tabs={[
-                { id: 'articles', label: '상세 조례', status: workspace?.active_revision?.status === 'editing_articles' ? '변경됨' : '작성 중', disabled: !isArticleModalOpen, disabledReason: '편집할 상세 조례가 없습니다.' },
-                { id: 'draft', label: '조례 초안', status: workspace?.active_revision?.status === 'ready_to_finalize' ? '검토 완료' : pendingDraft ? '법률 검토 필요' : '생성 필요', disabled: !pendingDraft, disabledReason: '상세 조례를 제출하면 초안을 확인할 수 있습니다.' },
-                { id: 'final', label: '확정 조례', status: completedDraft ? '확정' : '확정 필요', disabled: !completedDraft, disabledReason: '법률 검토 후 확정할 수 있습니다.' },
+                { id: 'articles', label: '상세 조례', disabled: !isArticleModalOpen, disabledReason: '편집할 상세 조례가 없습니다.' },
+                { id: 'draft', label: '조례 초안', disabled: !pendingDraft, disabledReason: '상세 조례를 제출하면 초안을 확인할 수 있습니다.' },
+                { id: 'final', label: '확정 조례', disabled: !completedDraft, disabledReason: '법률 검토 후 확정할 수 있습니다.' },
               ]}
             />
 
@@ -732,7 +826,7 @@ export default function App() {
                 <ArticleItemsModal
                   embedded
                   articles={mappedArticles}
-                  initialValues={workspace?.active_revision?.article_contents}
+                  initialValues={workspace?.active_revision?.article_contents ?? submittedArticleContents}
                   isLoading={isLoading}
                   onSubmit={handleArticlesSubmit}
                   onClose={() => undefined}

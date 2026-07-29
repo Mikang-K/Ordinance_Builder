@@ -12,6 +12,15 @@
 html { -webkit-text-size-adjust: 100%; }
 body { font-family: var(--font-sans-kr); background: #f8fafc; color: #1e293b; overscroll-behavior: none; }
 .workspace-font-scope { font-size: var(--workspace-font-size, 16px); }
+.workspace-font-scope > :not(.workspace-header) {
+  font-size: var(--workspace-font-size, 16px);
+}
+.workspace-font-scope > :not(.workspace-header) button,
+.workspace-font-scope > :not(.workspace-header) input,
+.workspace-font-scope > :not(.workspace-header) select,
+.workspace-font-scope > :not(.workspace-header) textarea {
+  font-size: inherit;
+}
 .workspace-font-scope .qa-panel,
 .workspace-font-scope .article-items-content textarea {
   font-size: var(--workspace-font-size, 16px) !important;
@@ -256,14 +265,14 @@ body > #root > .model-status .model-status-trigger { background: #1e40af; border
 
 .workspace-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 36%);
+  grid-template-columns: minmax(0, 1fr) 9px minmax(280px, var(--qa-panel-width, 36%));
   width: 100%;
   min-width: 0;
   min-height: 0;
   background: #eef2f7;
 }
 .workspace-qa-panel {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1;
   min-width: 0;
   min-height: 0;
@@ -271,6 +280,52 @@ body > #root > .model-status .model-status-trigger { background: #1e40af; border
   overflow: hidden;
   border-left: 1px solid #cbd5e1;
   background: #fff;
+}
+.workspace-resizer {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  z-index: 2;
+  min-width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+  background: #e2e8f0;
+  outline: none;
+}
+.workspace-resizer::before {
+  content: '';
+  position: absolute;
+  inset: 0 3px;
+  background: #cbd5e1;
+  transition: background-color .15s, box-shadow .15s;
+}
+.workspace-resizer span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 44px;
+  border-radius: 999px;
+  background: #94a3b8;
+  transform: translate(-50%, -50%);
+  transition: background-color .15s, height .15s;
+}
+.workspace-resizer:hover::before,
+.workspace-resizer:focus-visible::before,
+.workspace-resizing .workspace-resizer::before {
+  background: #bfdbfe;
+  box-shadow: 0 0 0 1px #93c5fd;
+}
+.workspace-resizer:hover span,
+.workspace-resizer:focus-visible span,
+.workspace-resizing .workspace-resizer span {
+  height: 60px;
+  background: #2563eb;
+}
+.workspace-resizing,
+.workspace-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 .workspace-qa-panel .qa-main-area,
 .workspace-qa-panel .qa-panel {
@@ -560,7 +615,7 @@ body > #root > .model-status .model-status-trigger { background: #1e40af; border
 .evidence-application-status button { border: 0; background: transparent; color: #1e40af; font: inherit; font-weight: 800; cursor: pointer; }
 
 @media (max-width: 900px) {
-  .workspace-shell { grid-template-columns: minmax(0, 1fr) minmax(280px, 42%); }
+  .workspace-shell { grid-template-columns: minmax(0, 1fr) 9px minmax(260px, var(--qa-panel-width, 42%)); }
   .workspace-editor-pane { padding: 8px; }
   .article-items-modal-embedded .article-items-sidebar { width: 220px !important; }
 }
@@ -579,6 +634,7 @@ body > #root > .model-status .model-status-trigger { background: #1e40af; border
     border-top: 1px solid #cbd5e1;
     border-bottom: 0;
   }
+  .workspace-resizer { display: none; }
   .workspace-editor-pane { order: 1; min-height: 70vh; flex: 0 0 70vh; }
   .workspace-tabs { width: 100%; }
   .workspace-tabs button { flex: 1; min-height: 44px; }
@@ -1290,6 +1346,13 @@ body > #root > .model-status .model-status-trigger { background: #1e40af; border
   gap: 8px;
   flex-wrap: wrap;
 }
+.completed-draft-file-actions {
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
 .completed-draft-filename {
   display: flex;
   align-items: center;
@@ -1330,7 +1393,7 @@ body > #root > .model-status .model-status-trigger { background: #1e40af; border
 }
 .completed-draft-text {
   font-family: var(--font-serif-kr);
-  font-size: 0.88rem;
+  font-size: var(--workspace-font-size, 16px);
   line-height: 1.9;
   white-space: pre-wrap;
   color: #1e293b;
@@ -1580,6 +1643,14 @@ body > #root > .model-status .model-status-trigger { background: #1e40af; border
   .completed-draft-filename input {
     flex: 1;
     width: auto;
+  }
+  .completed-draft-file-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+  .completed-draft-file-actions .draft-modal-copy-btn {
+    min-width: 0;
+    padding-inline: 8px;
   }
   .draft-modal-title {
     min-width: 0;

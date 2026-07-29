@@ -5,7 +5,6 @@ export type WorkspaceDocumentTab = 'articles' | 'draft' | 'final'
 interface TabItem {
   id: WorkspaceDocumentTab
   label: string
-  status: string
   disabled?: boolean
   disabledReason?: string
 }
@@ -53,7 +52,6 @@ export default function WorkspaceDocumentTabs({ activeTab, tabs, onChange }: Pro
           title={tab.disabled ? tab.disabledReason : undefined}
         >
           <span>{tab.label}</span>
-          <small>{tab.status}</small>
         </button>
       ))}
     </div>

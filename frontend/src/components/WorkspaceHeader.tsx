@@ -11,7 +11,6 @@ interface Props {
   onFontSizeCommit: (value: number) => void
   articleAction?: () => void
   draftAction?: () => void
-  completedAction?: () => void
   onNewSession: () => void
   onTutorial: () => void
   onBackToList: () => void
@@ -55,13 +54,11 @@ export default function WorkspaceHeader(props: Props) {
       setCommittedStatus(`본문 크기가 ${previewSize}px로 적용되었습니다.`)
     }
   }
-  const contextualAction = props.completedAction
-    ? <button type="button" className="header-context-action completed" onClick={props.completedAction}>확정 초안 보기</button>
-    : props.draftAction
-      ? <button type="button" className="header-context-action" onClick={props.draftAction}>초안 편집 · 검증</button>
-      : props.articleAction
-        ? <button type="button" className="header-context-action" onClick={props.articleAction}>상세 조항 편집</button>
-        : null
+  const contextualAction = props.draftAction
+    ? <button type="button" className="header-context-action" onClick={props.draftAction}>초안 편집 · 검증</button>
+    : props.articleAction
+      ? <button type="button" className="header-context-action" onClick={props.articleAction}>상세 조항 편집</button>
+      : null
 
   return (
     <header className="app-header workspace-header">
@@ -115,7 +112,6 @@ export default function WorkspaceHeader(props: Props) {
       <div className="header-actions" aria-label="현재 작업">
         {contextualAction}
         <button type="button" className="header-primary-action" id="btn-new-session-header" onClick={props.onNewSession}>새 조례 만들기</button>
-        <button type="button" className="header-help-action" onClick={props.onTutorial}>사용 안내</button>
       </div>
     </header>
   )
